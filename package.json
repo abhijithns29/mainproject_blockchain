@@ -2,7 +2,6 @@
   "name": "blockchain-land-registry",
   "private": true,
   "version": "1.0.0",
-  "type": "commonjs",
   "scripts": {
     "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
     "dev:setup": "npm run blockchain:node & sleep 5 && npm run blockchain:setup && npm run dev",

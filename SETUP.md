@@ -85,14 +85,29 @@ VITE_API_URL=http://localhost:5000/api
 1. Install MongoDB Community Edition
 2. Start MongoDB service:
    ```bash
+   # Check if MongoDB is running
+   ps aux | grep mongod
+   
    # Windows
    net start MongoDB
    
    # macOS (with Homebrew)
    brew services start mongodb-community
+   # Or manually:
+   mongod --config /usr/local/etc/mongod.conf
    
    # Linux
    sudo systemctl start mongod
+   # Or manually:
+   sudo mongod --dbpath /var/lib/mongodb
+   ```
+
+3. Verify MongoDB is running:
+   ```bash
+   # Test connection
+   mongosh --eval "db.adminCommand('ismaster')"
+   # Or for older versions:
+   mongo --eval "db.adminCommand('ismaster')"
    ```
 
 #### Option B: MongoDB Atlas (Recommended for beginners)
