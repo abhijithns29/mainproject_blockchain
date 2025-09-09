@@ -6,8 +6,8 @@ class ApiService {
     
     const config: RequestInit = {
       headers: {
-        'Content-Type': 'application/json',
         ...(token && { Authorization: `Bearer ${token}` }),
+        ...(!(options.body instanceof FormData) && { 'Content-Type': 'application/json' }),
         ...options.headers,
       },
       ...options,

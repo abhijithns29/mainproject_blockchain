@@ -1,6 +1,7 @@
 const express = require('express');
 const multer = require('multer');
 const Property = require('../models/Property');
+const User = require('../models/User');
 const Transaction = require('../models/Transaction');
 const { auth, adminAuth } = require('../middleware/auth');
 const blockchainService = require('../config/blockchain');

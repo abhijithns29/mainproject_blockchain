@@ -90,6 +90,10 @@ export const useAuthProvider = () => {
 
   const connectWallet = async () => {
     try {
+      if (typeof window === 'undefined' || !window.ethereum) {
+        throw new Error('MetaMask is not installed. Please install MetaMask to continue.');
+      }
+      
       const blockchainService = await import('../services/blockchain');
       const walletInfo = await blockchainService.default.connectWallet();
       

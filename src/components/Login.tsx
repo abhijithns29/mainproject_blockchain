@@ -42,7 +42,11 @@ const Login: React.FC = () => {
     setError('');
 
     try {
-      await connectWallet();
+      if (typeof window !== 'undefined' && window.ethereum) {
+        await connectWallet();
+      } else {
+        throw new Error('MetaMask is not installed. Please install MetaMask to use wallet connection.');
+      }
     } catch (error: any) {
       setError(error.message || 'Wallet connection failed');
     } finally {

@@ -15,7 +15,7 @@ class PDFGenerator {
       // Certificate details
       doc.setFontSize(12);
       doc.text(`Certificate ID: ${certificateHash}`, 20, 70);
-      doc.text(`Property ID: ${property.blockchainId}`, 20, 85);
+      doc.text(`Property ID: ${property.blockchainId || property.id}`, 20, 85);
       doc.text(`Transaction Type: ${transaction.transactionType}`, 20, 100);
       doc.text(`Date: ${new Date(transaction.createdAt).toLocaleDateString()}`, 20, 115);
       
@@ -24,13 +24,13 @@ class PDFGenerator {
       doc.text('PROPERTY DETAILS', 20, 140);
       doc.setFontSize(11);
       doc.text(`Title: ${property.title}`, 20, 155);
-      doc.text(`Location: ${property.location.address}, ${property.location.city}`, 20, 170);
+      doc.text(`Location: ${typeof property.location === 'string' ? property.location : `${property.location.address}, ${property.location.city}`}`, 20, 170);
       doc.text(`Size: ${property.size} sq ft`, 20, 185);
       doc.text(`Valuation: $${property.valuation.toLocaleString()}`, 20, 200);
       
       // Generate QR code for verification
       const qrCodeDataURL = await QRCode.toDataURL(
-        `${process.env.FRONTEND_URL}/verify/${certificateHash}`,
+        `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify/${certificateHash}`,
         { width: 100 }
       );
       

@@ -5,6 +5,7 @@
   "type": "commonjs",
   "scripts": {
     "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
+    "dev:setup": "npm run blockchain:node & sleep 5 && npm run blockchain:setup && npm run dev",
     "blockchain:setup": "npx hardhat run scripts/local-setup.js --network localhost",
     "blockchain:deploy": "npx hardhat run scripts/deploy.js",
     "blockchain:node": "npx hardhat node",
@@ -13,7 +14,8 @@
     "client:dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "setup": "echo 'Setting up environment...' && npm install && node scripts/setup-env.js"
   },
   "dependencies": {
     "axios": "^1.11.0",

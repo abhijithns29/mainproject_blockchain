@@ -39,6 +39,7 @@ class IPFSService {
       
       fs.writeFileSync(path.join(uploadsDir, hash), fileBuffer);
       
+      console.log(`File uploaded to IPFS with hash: ${hash}`);
       return hash;
     } catch (error) {
       console.error('Error uploading to IPFS:', error);
