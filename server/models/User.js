@@ -25,6 +25,40 @@ const userSchema = new mongoose.Schema({
     enum: ['USER', 'ADMIN'],
     default: 'USER'
   },
+  // User verification documents
+  verificationDocuments: {
+    panCard: {
+      number: String,
+      documentUrl: String,
+      verified: { type: Boolean, default: false }
+    },
+    aadhaarCard: {
+      number: String,
+      documentUrl: String,
+      verified: { type: Boolean, default: false }
+    },
+    drivingLicense: {
+      number: String,
+      documentUrl: String,
+      verified: { type: Boolean, default: false }
+    },
+    passport: {
+      number: String,
+      documentUrl: String,
+      verified: { type: Boolean, default: false }
+    }
+  },
+  verificationStatus: {
+    type: String,
+    enum: ['PENDING', 'VERIFIED', 'REJECTED'],
+    default: 'PENDING'
+  },
+  verifiedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  verificationDate: Date,
+  rejectionReason: String,
   profile: {
     phoneNumber: String,
     address: {
@@ -33,12 +67,7 @@ const userSchema = new mongoose.Schema({
       state: String,
       zipCode: String
     },
-    nationalId: String,
     profileImage: String
-  },
-  isVerified: {
-    type: Boolean,
-    default: false
   },
   ownedProperties: [{
     type: mongoose.Schema.Types.ObjectId,

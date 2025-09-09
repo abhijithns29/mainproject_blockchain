@@ -1,5 +1,5 @@
 import React from 'react';
-import { LogOut, User, Home, FileText, Settings } from 'lucide-react';
+import { LogOut, User, Home, FileText, Settings, Shield, Database, ShoppingCart, MessageCircle } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 interface NavbarProps {
@@ -11,8 +11,11 @@ const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
   const { auth, logout } = useAuth();
 
   const menuItems = [
-    { id: 'properties', label: 'Properties', icon: Home },
+    { id: 'land-database', label: 'Land Database', icon: Database },
+    { id: 'marketplace', label: 'Marketplace', icon: ShoppingCart },
+    { id: 'chats', label: 'Chats', icon: MessageCircle },
     { id: 'transactions', label: 'Transactions', icon: FileText },
+    { id: 'verification', label: 'Verification', icon: Shield },
     { id: 'profile', label: 'Profile', icon: User },
   ];
 

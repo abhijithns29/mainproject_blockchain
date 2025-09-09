@@ -8,6 +8,10 @@ import PropertyForm from './PropertyForm';
 import TransactionHistory from './TransactionHistory';
 import AdminPanel from './AdminPanel';
 import UserProfile from './UserProfile';
+import UserVerification from './UserVerification';
+import LandDatabase from './LandDatabase';
+import LandMarketplace from './LandMarketplace';
+import ChatSystem from './ChatSystem';
 import apiService from '../services/api';
 
 const Dashboard: React.FC = () => {
@@ -167,6 +171,18 @@ const Dashboard: React.FC = () => {
 
       case 'admin':
         return auth.user?.role === 'ADMIN' ? <AdminPanel /> : null;
+
+      case 'verification':
+        return <UserVerification />;
+
+      case 'land-database':
+        return <LandDatabase />;
+
+      case 'marketplace':
+        return <LandMarketplace />;
+
+      case 'chats':
+        return <ChatSystem />;
 
       default:
         return null;

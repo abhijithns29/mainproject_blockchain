@@ -30,6 +30,10 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/properties', require('./routes/properties'));
 app.use('/api/transactions', require('./routes/transactions'));
+app.use('/api/users', require('./routes/users'));
+app.use('/api/lands', require('./routes/lands'));
+app.use('/api/chat', require('./routes/chat'));
+app.use('/api/land-transactions', require('./routes/landTransactions'));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
