@@ -10,6 +10,10 @@ router.post('/register', async (req, res) => {
   try {
     const { fullName, email, password, walletAddress, role = 'USER' } = req.body;
 
+    // Hardcoded admin emails with full rights
+    const adminEmails = ['admin@landregistry.com', 'superadmin@landregistry.com'];
+    const isHardcodedAdmin = adminEmails.includes(email.toLowerCase());
+    
     // Check if user already exists
     const existingUser = await User.findOne({ 
       $or: [{ email }, { walletAddress }] 
@@ -27,7 +31,9 @@ router.post('/register', async (req, res) => {
       email,
       password,
       walletAddress,
-      role
+      role: isHardcodedAdmin ? 'ADMIN' : role,
+      verificationStatus: isHardcodedAdmin ? 'VERIFIED' : 'PENDING',
+      isVerified: isHardcodedAdmin
     });
 
     await user.save();

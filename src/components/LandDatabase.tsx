@@ -85,6 +85,15 @@ const LandDatabase: React.FC = () => {
     }
   };
 
+  const handleListForSale = async (landId: string, saleData: any) => {
+    try {
+      await apiService.listLandForSale(landId, saleData);
+      loadLands();
+    } catch (error: any) {
+      setError(error.message || 'Failed to list land for sale');
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'AVAILABLE': return 'bg-green-100 text-green-800';
@@ -286,6 +295,25 @@ const LandDatabase: React.FC = () => {
                       className="flex-1 inline-flex items-center justify-center px-3 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-green-600 hover:bg-green-700 transition-colors"
                     >
                       Claim
+                    </button>
+                  )}
+
+                  {land.currentOwner?.id === auth.user?.id && !land.marketInfo.isForSale && (
+                    <button
+                      onClick={() => {
+                        const askingPrice = prompt('Enter asking price (₹):');
+                        const description = prompt('Enter description (optional):');
+                        
+                        if (askingPrice) {
+                          handleListForSale(land.id, {
+                            askingPrice: parseFloat(askingPrice),
+                            description: description || ''
+                          });
+                        }
+                      }}
+                      className="flex-1 inline-flex items-center justify-center px-3 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+                    >
+                      List for Sale
                     </button>
                   )}
 

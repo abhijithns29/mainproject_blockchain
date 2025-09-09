@@ -133,20 +133,26 @@ class ApiService {
   // User verification endpoints
   async submitVerificationDocuments(formData: FormData) {
     const token = localStorage.getItem('token');
-    const response = await fetch(`${API_BASE_URL}/users/verification/submit`, {
-      method: 'POST',
-      headers: {
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
-      body: formData,
-    });
+    
+    try {
+      const response = await fetch(`${API_BASE_URL}/users/verification/submit`, {
+        method: 'POST',
+        headers: {
+          ...(token && { Authorization: `Bearer ${token}` }),
+        },
+        body: formData,
+      });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.message || 'Document submission failed');
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.message || 'Document submission failed');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Document submission error:', error);
+      throw error;
     }
-
-    return await response.json();
   }
 
   async getPendingVerifications() {

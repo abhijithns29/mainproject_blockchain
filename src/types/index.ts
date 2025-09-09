@@ -30,6 +30,7 @@ export interface User {
   verifiedBy?: string;
   verificationDate?: string;
   rejectionReason?: string;
+  isVerified?: boolean;
   profile?: {
     phoneNumber?: string;
     address?: {

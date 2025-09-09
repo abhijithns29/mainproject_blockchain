@@ -22,50 +22,82 @@ router.post('/verification/submit', auth, upload.fields([
       return res.status(404).json({ message: 'User not found' });
     }
 
+    // Check if user is already verified
+    if (user.verificationStatus === 'VERIFIED') {
+      return res.status(400).json({ message: 'User is already verified' });
+    }
+
     const verificationDocuments = {};
 
     // Upload PAN card
     if (req.files.panCard && panNumber) {
-      const panFile = req.files.panCard[0];
-      const panHash = await ipfsService.uploadFile(panFile.buffer, panFile.originalname);
-      verificationDocuments.panCard = {
-        number: panNumber,
-        documentUrl: ipfsService.getFileUrl(panHash),
-        verified: false
-      };
+      try {
+        const panFile = req.files.panCard[0];
+        const panHash = await ipfsService.uploadFile(panFile.buffer, panFile.originalname);
+        verificationDocuments.panCard = {
+          number: panNumber,
+          documentUrl: ipfsService.getFileUrl(panHash),
+          verified: false
+        };
+      } catch (uploadError) {
+        console.error('PAN card upload error:', uploadError);
+        return res.status(500).json({ message: 'Failed to upload PAN card' });
+      }
     }
 
     // Upload Aadhaar card
     if (req.files.aadhaarCard && aadhaarNumber) {
-      const aadhaarFile = req.files.aadhaarCard[0];
-      const aadhaarHash = await ipfsService.uploadFile(aadhaarFile.buffer, aadhaarFile.originalname);
-      verificationDocuments.aadhaarCard = {
-        number: aadhaarNumber,
-        documentUrl: ipfsService.getFileUrl(aadhaarHash),
-        verified: false
-      };
+      try {
+        const aadhaarFile = req.files.aadhaarCard[0];
+        const aadhaarHash = await ipfsService.uploadFile(aadhaarFile.buffer, aadhaarFile.originalname);
+        verificationDocuments.aadhaarCard = {
+          number: aadhaarNumber,
+          documentUrl: ipfsService.getFileUrl(aadhaarHash),
+          verified: false
+        };
+      } catch (uploadError) {
+        console.error('Aadhaar card upload error:', uploadError);
+        return res.status(500).json({ message: 'Failed to upload Aadhaar card' });
+      }
     }
 
     // Upload Driving License
     if (req.files.drivingLicense && dlNumber) {
-      const dlFile = req.files.drivingLicense[0];
-      const dlHash = await ipfsService.uploadFile(dlFile.buffer, dlFile.originalname);
-      verificationDocuments.drivingLicense = {
-        number: dlNumber,
-        documentUrl: ipfsService.getFileUrl(dlHash),
-        verified: false
-      };
+      try {
+        const dlFile = req.files.drivingLicense[0];
+        const dlHash = await ipfsService.uploadFile(dlFile.buffer, dlFile.originalname);
+        verificationDocuments.drivingLicense = {
+          number: dlNumber,
+          documentUrl: ipfsService.getFileUrl(dlHash),
+          verified: false
+        };
+      } catch (uploadError) {
+        console.error('Driving license upload error:', uploadError);
+        return res.status(500).json({ message: 'Failed to upload driving license' });
+      }
     }
 
     // Upload Passport
     if (req.files.passport && passportNumber) {
-      const passportFile = req.files.passport[0];
-      const passportHash = await ipfsService.uploadFile(passportFile.buffer, passportFile.originalname);
-      verificationDocuments.passport = {
-        number: passportNumber,
-        documentUrl: ipfsService.getFileUrl(passportHash),
-        verified: false
-      };
+      try {
+        const passportFile = req.files.passport[0];
+        const passportHash = await ipfsService.uploadFile(passportFile.buffer, passportFile.originalname);
+        verificationDocuments.passport = {
+          number: passportNumber,
+          documentUrl: ipfsService.getFileUrl(passportHash),
+          verified: false
+        };
+      } catch (uploadError) {
+        console.error('Passport upload error:', uploadError);
+        return res.status(500).json({ message: 'Failed to upload passport' });
+      }
+    }
+
+    // Check if at least one document was uploaded
+    if (Object.keys(verificationDocuments).length === 0) {
+      return res.status(400).json({ 
+        message: 'At least one verification document is required' 
+      });
     }
 
     user.verificationDocuments = { ...user.verificationDocuments, ...verificationDocuments };
@@ -78,7 +110,10 @@ router.post('/verification/submit', auth, upload.fields([
     });
   } catch (error) {
     console.error('Document submission error:', error);
-    res.status(500).json({ message: 'Failed to submit verification documents' });
+    res.status(500).json({ 
+      message: 'Failed to submit verification documents',
+      error: error.message 
+    });
   }
 });
 

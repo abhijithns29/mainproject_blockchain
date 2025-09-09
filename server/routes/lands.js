@@ -29,18 +29,30 @@ router.post('/add', adminAuth, upload.array('documents'), async (req, res) => {
       ownershipHistory
     } = req.body;
 
+    // Validate required fields
+    if (!surveyNumber || !village || !taluka || !district || !state || !pincode) {
+      return res.status(400).json({ 
+        message: 'Missing required fields: surveyNumber, village, taluka, district, state, pincode' 
+      });
+    }
+
     // Upload documents to IPFS
     const documents = [];
     if (req.files && req.files.length > 0) {
       for (const file of req.files) {
-        const ipfsHash = await ipfsService.uploadFile(file.buffer, file.originalname);
-        documents.push({
-          type: 'OTHER', // This would be determined based on file name or user input
-          documentNumber: `DOC-${Date.now()}`,
-          date: new Date(),
-          documentUrl: ipfsService.getFileUrl(ipfsHash),
-          ipfsHash
-        });
+        try {
+          const ipfsHash = await ipfsService.uploadFile(file.buffer, file.originalname);
+          documents.push({
+            type: 'OTHER',
+            documentNumber: `DOC-${Date.now()}`,
+            date: new Date(),
+            documentUrl: ipfsService.getFileUrl(ipfsHash),
+            ipfsHash
+          });
+        } catch (uploadError) {
+          console.error('File upload error:', uploadError);
+          // Continue without failing the entire request
+        }
       }
     }
 
@@ -52,8 +64,8 @@ router.post('/add', adminAuth, upload.array('documents'), async (req, res) => {
       district,
       state,
       pincode,
-      area: JSON.parse(area),
-      boundaries: JSON.parse(boundaries),
+      area: typeof area === 'string' ? JSON.parse(area) : area,
+      boundaries: typeof boundaries === 'string' ? JSON.parse(boundaries) : boundaries,
       landType,
       classification,
       originalDocuments: documents,
@@ -80,7 +92,10 @@ router.post('/add', adminAuth, upload.array('documents'), async (req, res) => {
     });
   } catch (error) {
     console.error('Add land error:', error);
-    res.status(500).json({ message: 'Failed to add land to database' });
+    res.status(500).json({ 
+      message: 'Failed to add land to database',
+      error: error.message 
+    });
   }
 });
 

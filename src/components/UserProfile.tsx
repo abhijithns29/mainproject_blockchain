@@ -5,6 +5,8 @@ import { useAuth } from '../hooks/useAuth';
 const UserProfile: React.FC = () => {
   const { auth } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [formData, setFormData] = useState({
     fullName: auth.user?.fullName || '',
     email: auth.user?.email || '',
@@ -38,12 +40,21 @@ const UserProfile: React.FC = () => {
   };
 
   const handleSave = async () => {
-    // In a real implementation, this would save to the API
-    console.log('Saving profile:', formData);
-    setIsEditing(false);
+    try {
+      setLoading(true);
+      setError('');
+      // In a real implementation, this would save to the API
+      console.log('Saving profile:', formData);
+      setIsEditing(false);
+    } catch (error: any) {
+      setError(error.message || 'Failed to save profile');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCancel = () => {
+    setError('');
     setFormData({
       fullName: auth.user?.fullName || '',
       email: auth.user?.email || '',
@@ -58,7 +69,13 @@ const UserProfile: React.FC = () => {
     setIsEditing(false);
   };
 
-  if (!auth.user) return null;
+  if (!auth.user) {
+    return (
+      <div className="flex justify-center py-12">
+        <div className="text-gray-500">Loading profile...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -81,13 +98,19 @@ const UserProfile: React.FC = () => {
           <div className="flex space-x-2">
             <button
               onClick={handleSave}
+              disabled={loading}
               className="inline-flex items-center px-4 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
             >
-              <Save className="h-4 w-4 mr-2" />
-              Save
+              {loading ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+              ) : (
+                <Save className="h-4 w-4 mr-2" />
+              )}
+              {loading ? 'Saving...' : 'Save'}
             </button>
             <button
               onClick={handleCancel}
+              disabled={loading}
               className="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 transition-colors"
             >
               <X className="h-4 w-4 mr-2" />
@@ -96,6 +119,12 @@ const UserProfile: React.FC = () => {
           </div>
         )}
       </div>
+
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md">
+          {error}
+        </div>
+      )}
 
       <div className="bg-white shadow-sm rounded-lg">
         <div className="px-6 py-4 border-b border-gray-200">
@@ -111,13 +140,17 @@ const UserProfile: React.FC = () => {
                 {auth.user.role === 'ADMIN' ? 'Administrator' : 'Property Owner'}
               </p>
               <div className="flex items-center mt-1">
-                {auth.user.isVerified ? (
+                {auth.user.verificationStatus === 'VERIFIED' ? (
                   <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                     Verified Account
                   </span>
-                ) : (
+                ) : auth.user.verificationStatus === 'PENDING' ? (
                   <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                     Pending Verification
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                    Verification Required
                   </span>
                 )}
               </div>
