@@ -70,7 +70,7 @@ This is a production-ready land registry system that combines:
 
 ### Storage Systems
 - **MongoDB**: User accounts, property metadata, transaction records
-- **IPFS**: Documents, images, certificates
+- **Free IPFS/Web3.Storage**: Documents, images, certificates (completely free)
 - **Blockchain**: Ownership records, transaction approvals
 
 ## 🚀 Getting Started
@@ -80,7 +80,7 @@ This is a production-ready land registry system that combines:
 - MongoDB instance
 - Ethereum development environment (Hardhat/Truffle)
 - MetaMask browser extension
-- IPFS node or Infura IPFS access
+- Optional: Web3.Storage free account (1TB free storage)
 
 ### Environment Setup
 
@@ -104,6 +104,7 @@ This is a production-ready land registry system that combines:
 4. **Blockchain Setup**
    - Deploy the LandRegistry smart contract to your chosen network
    - Update CONTRACT_ADDRESS in .env
+   - Optionally get a free Web3.Storage token for enhanced IPFS features
 
 5. **Start Development**
    ```bash
@@ -116,7 +117,7 @@ For production deployment:
 
 1. **Database**: Use MongoDB Atlas or dedicated MongoDB server
 2. **Blockchain**: Deploy to mainnet or testnet (Sepolia recommended for testing)
-3. **IPFS**: Use Infura IPFS or dedicated IPFS node
+3. **Storage**: Use Web3.Storage (free) or dedicated IPFS node
 4. **Frontend**: Deploy to Vercel, Netlify, or similar
 5. **Backend**: Deploy to AWS, Google Cloud, or similar
 
@@ -127,7 +128,7 @@ For production deployment:
 - `JWT_SECRET`: Secret key for JWT tokens
 - `RPC_URL`: Ethereum RPC endpoint
 - `CONTRACT_ADDRESS`: Deployed smart contract address
-- `INFURA_PROJECT_ID`: Infura IPFS project ID
+- `WEB3_STORAGE_TOKEN`: Optional free Web3.Storage token
 - `ADMIN_PRIVATE_KEY`: Admin wallet private key
 
 ### Smart Contract Configuration
