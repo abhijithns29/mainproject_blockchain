@@ -78,7 +78,7 @@ This is a production-ready land registry system that combines:
 ### Prerequisites
 - Node.js (v18 or higher)
 - MongoDB instance
-- Ethereum development environment (Hardhat/Truffle)
+- Hardhat (included in dependencies)
 - MetaMask browser extension
 - Optional: Web3.Storage free account (1TB free storage)
 
@@ -101,15 +101,37 @@ This is a production-ready land registry system that combines:
    - Start MongoDB service
    - Create database: `landregistry`
 
-4. **Blockchain Setup**
-   - Deploy the LandRegistry smart contract to your chosen network
-   - Update CONTRACT_ADDRESS in .env
-   - Optionally get a free Web3.Storage token for enhanced IPFS features
+4. **Blockchain Setup (Local Development)**
+   ```bash
+   # Terminal 1: Start local blockchain
+   npm run blockchain:node
+   
+   # Terminal 2: Deploy contract and setup
+   npm run blockchain:setup
+   
+   # Update .env with the displayed CONTRACT_ADDRESS
+   ```
 
-5. **Start Development**
+5. **For Testnet Deployment (Optional)**
+   ```bash
+   # Deploy to Sepolia testnet
+   npm run blockchain:deploy -- --network sepolia
+   ```
+
+6. **Start Development**
    ```bash
    npm run dev
    ```
+
+### Quick Start Commands
+
+```bash
+# Complete setup for local development
+npm install
+npm run blockchain:node &  # Start in background
+npm run blockchain:setup  # Deploy contract
+npm run dev              # Start application
+```
 
 ### Production Deployment
 
@@ -126,14 +148,17 @@ For production deployment:
 ### Environment Variables
 - `MONGODB_URI`: Database connection string
 - `JWT_SECRET`: Secret key for JWT tokens
-- `RPC_URL`: Ethereum RPC endpoint
+- `RPC_URL`: Ethereum RPC endpoint (http://localhost:8545 for local)
 - `CONTRACT_ADDRESS`: Deployed smart contract address
 - `WEB3_STORAGE_TOKEN`: Optional free Web3.Storage token
 - `ADMIN_PRIVATE_KEY`: Admin wallet private key
+- `VITE_CONTRACT_ADDRESS`: Frontend contract address
+- `VITE_RPC_URL`: Frontend RPC URL
 
 ### Smart Contract Configuration
 - Modify contract parameters in `contracts/LandRegistry.sol`
-- Update ABI in `src/services/blockchain.ts` after redeployment
+- Run `npm run blockchain:compile` after changes
+- Redeploy with `npm run blockchain:deploy`
 
 ## 👥 User Roles
 

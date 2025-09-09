@@ -6,13 +6,62 @@ declare global {
   }
 }
 
+interface ContractInfo {
+  contractAddress: string;
+  propertyCounter: number;
+  transactionCounter: number;
+  owner: string;
+  network: any;
+}
+
+interface Property {
+  id: number;
+  ipfsHash: string;
+  owner: string;
+  location: string;
+  size: number;
+  valuation: string;
+  status: number;
+  registrationDate: Date;
+  isVerified: boolean;
+}
+
 class BlockchainService {
   private provider: ethers.providers.Web3Provider | null = null;
   private signer: ethers.Signer | null = null;
+  private contract: ethers.Contract | null = null;
+  private contractAddress = import.meta.env.VITE_CONTRACT_ADDRESS;
+  
+  private contractABI = [
+    // Property registration
+    "function registerProperty(address _owner, string memory _ipfsHash, string memory _location, uint256 _size, uint256 _valuation) external returns (uint256)",
+    
+    // Transaction management
+    "function initiateTransaction(uint256 _propertyId, address _to, uint8 _type, uint256 _amount) external returns (uint256)",
+    "function approveTransaction(uint256 _propertyId, uint256 _transactionIndex, string memory _certificateHash) external",
+    
+    // Property queries
+    "function getProperty(uint256 _propertyId) external view returns (tuple(uint256 id, string ipfsHash, address owner, string location, uint256 size, uint256 valuation, uint8 status, uint256 registrationDate, bool isVerified))",
+    "function getPropertyTransactions(uint256 _propertyId) external view returns (tuple(uint256 propertyId, address from, address to, uint8 transactionType, uint256 amount, uint256 timestamp, bool isApproved, string certificateHash)[])",
+    "function getOwnerProperties(address _owner) external view returns (uint256[])",
+    
+    // Property management
+    "function updatePropertyStatus(uint256 _propertyId, uint8 _status) external",
+    
+    // Admin functions
+    "function addAdmin(address _admin) external",
+    "function removeAdmin(address _admin) external",
+    "function admins(address) external view returns (bool)",
+    "function owner() external view returns (address)",
+    
+    // Counters
+    "function propertyCounter() external view returns (uint256)",
+    "function transactionCounter() external view returns (uint256)"
+  ];
 
   async connectWallet() {
     if (!window.ethereum) {
-      throw new Error('MetaMask is not installed');
+      throw new Error('MetaMask is not installed. Please install MetaMask to continue.');
     }
 
     try {
@@ -24,6 +73,18 @@ class BlockchainService {
 
       const address = await this.signer.getAddress();
       const network = await this.provider.getNetwork();
+
+      // Initialize contract if address is available
+      if (this.contractAddress) {
+        this.contract = new ethers.Contract(
+          this.contractAddress,
+          this.contractABI,
+          this.signer
+        );
+      }
+
+      console.log('Wallet connected:', address);
+      console.log('Network:', network.name, network.chainId);
 
       return {
         address,
@@ -63,6 +124,119 @@ class BlockchainService {
     }
   }
 
+  async getProperty(propertyId: number): Promise<Property> {
+    if (!this.contract) {
+      throw new Error('Contract not initialized. Please connect your wallet first.');
+    }
+
+    try {
+      const property = await this.contract.getProperty(propertyId);
+      
+      return {
+        id: property.id.toNumber(),
+        ipfsHash: property.ipfsHash,
+        owner: property.owner,
+        location: property.location,
+        size: property.size.toNumber(),
+        valuation: ethers.utils.formatEther(property.valuation),
+        status: property.status,
+        registrationDate: new Date(property.registrationDate.toNumber() * 1000),
+        isVerified: property.isVerified
+      };
+    } catch (error) {
+      console.error('Error getting property:', error);
+      throw new Error(`Failed to get property: ${error}`);
+    }
+  }
+
+  async getOwnerProperties(ownerAddress: string): Promise<number[]> {
+    if (!this.contract) {
+      throw new Error('Contract not initialized. Please connect your wallet first.');
+    }
+
+    try {
+      const propertyIds = await this.contract.getOwnerProperties(ownerAddress);
+      return propertyIds.map((id: ethers.BigNumber) => id.toNumber());
+    } catch (error) {
+      console.error('Error getting owner properties:', error);
+      throw new Error(`Failed to get owner properties: ${error}`);
+    }
+  }
+
+  async initiateTransaction(propertyId: number, to: string, type: string, amount: string) {
+    if (!this.contract) {
+      throw new Error('Contract not initialized. Please connect your wallet first.');
+    }
+
+    try {
+      const typeNumber = this.getTransactionTypeNumber(type);
+      
+      // Estimate gas
+      const gasEstimate = await this.contract.estimateGas.initiateTransaction(
+        propertyId,
+        to,
+        typeNumber,
+        ethers.utils.parseEther(amount)
+      );
+
+      const gasLimit = gasEstimate.mul(120).div(100); // Add 20% buffer
+
+      const tx = await this.contract.initiateTransaction(
+        propertyId,
+        to,
+        typeNumber,
+        ethers.utils.parseEther(amount),
+        { gasLimit }
+      );
+      
+      console.log('Transaction initiated:', tx.hash);
+      return await tx.wait();
+    } catch (error) {
+      console.error('Error initiating transaction:', error);
+      throw new Error(`Transaction initiation failed: ${error}`);
+    }
+  }
+
+  async getContractInfo(): Promise<ContractInfo> {
+    if (!this.contract) {
+      throw new Error('Contract not initialized. Please connect your wallet first.');
+    }
+
+    try {
+      const [propertyCounter, transactionCounter, owner] = await Promise.all([
+        this.contract.propertyCounter(),
+        this.contract.transactionCounter(),
+        this.contract.owner()
+      ]);
+
+      const network = await this.provider!.getNetwork();
+
+      return {
+        contractAddress: this.contractAddress!,
+        propertyCounter: propertyCounter.toNumber(),
+        transactionCounter: transactionCounter.toNumber(),
+        owner,
+        network
+      };
+    } catch (error) {
+      console.error('Error getting contract info:', error);
+      throw error;
+    }
+  }
+
+  async isAdmin(address: string): Promise<boolean> {
+    if (!this.contract) {
+      throw new Error('Contract not initialized. Please connect your wallet first.');
+    }
+
+    try {
+      return await this.contract.admins(address);
+    } catch (error) {
+      console.error('Error checking admin status:', error);
+      return false;
+    }
+  }
+
   async switchToChain(chainId: number) {
     if (!window.ethereum) {
       throw new Error('MetaMask is not installed');
@@ -85,6 +259,16 @@ class BlockchainService {
 
   private async addChain(chainId: number) {
     const chainData: { [key: number]: any } = {
+      1337: { // Local Hardhat
+        chainName: 'Hardhat Local',
+        rpcUrls: ['http://localhost:8545'],
+        nativeCurrency: {
+          name: 'Ethereum',
+          symbol: 'ETH',
+          decimals: 18,
+        },
+        blockExplorerUrls: null,
+      },
       11155111: { // Sepolia testnet
         chainName: 'Sepolia Test Network',
         rpcUrls: ['https://sepolia.infura.io/v3/'],
@@ -112,6 +296,16 @@ class BlockchainService {
     });
   }
 
+  private getTransactionTypeNumber(type: string): number {
+    const types: { [key: string]: number } = {
+      'REGISTRATION': 0,
+      'SALE': 1,
+      'RENT': 2,
+      'TRANSFER': 3
+    };
+    return types[type] || 0;
+  }
+
   onAccountsChanged(callback: (accounts: string[]) => void) {
     if (window.ethereum) {
       window.ethereum.on('accountsChanged', callback);
@@ -127,6 +321,7 @@ class BlockchainService {
   disconnect() {
     this.provider = null;
     this.signer = null;
+    this.contract = null;
   }
 }
 

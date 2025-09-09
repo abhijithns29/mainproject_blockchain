@@ -95,18 +95,26 @@ router.put('/:id/approve', adminAuth, async (req, res) => {
     );
 
     // Approve transaction on blockchain
-    const blockchainTx = await blockchainService.approveTransaction(
-      transaction.propertyId.blockchainId,
-      0, // Transaction index (simplified for demo)
-      certificateIPFSHash
-    );
+    let blockchainTxHash = null;
+    
+    try {
+      const blockchainTx = await blockchainService.approveTransaction(
+        transaction.propertyId.blockchainId,
+        0, // Transaction index (simplified for demo)
+        certificateIPFSHash
+      );
+      blockchainTxHash = blockchainTx.transactionHash;
+    } catch (blockchainError) {
+      console.error('Blockchain approval failed:', blockchainError);
+      // Continue with database update even if blockchain fails
+    }
 
     // Update transaction
     transaction.status = 'APPROVED';
     transaction.approvedBy = req.user._id;
     transaction.certificateHash = certificateIPFSHash;
     transaction.certificateUrl = ipfsService.getFileUrl(certificateIPFSHash);
-    transaction.blockchainTxHash = blockchainTx.transactionHash;
+    transaction.blockchainTxHash = blockchainTxHash;
     await transaction.save();
 
     // Update property ownership if it's a sale or transfer

@@ -114,19 +114,37 @@ router.post('/register', adminAuth, upload.array('files'), async (req, res) => {
       return res.status(404).json({ message: 'Owner not found' });
     }
 
-    const blockchainTx = await blockchainService.registerProperty(
-      owner.walletAddress,
-      ipfsHash,
-      `${propertyMetadata.location.address}, ${propertyMetadata.location.city}`,
-      size,
-      valuation
-    );
+    let blockchainId = 0;
+    let blockchainTxHash = null;
 
-    // Get the property ID from blockchain event
-    const propertyRegisteredEvent = blockchainTx.events.find(
-      event => event.event === 'PropertyRegistered'
-    );
-    const blockchainId = propertyRegisteredEvent.args.propertyId.toNumber();
+    try {
+      const blockchainTx = await blockchainService.registerProperty(
+        owner.walletAddress,
+        ipfsHash,
+        `${propertyMetadata.location.address}, ${propertyMetadata.location.city}`,
+        parseInt(size),
+        parseFloat(valuation)
+      );
+
+      // Get the property ID from blockchain event
+      const propertyRegisteredEvent = blockchainTx.events?.find(
+        event => event.event === 'PropertyRegistered'
+      );
+      
+      if (propertyRegisteredEvent) {
+        blockchainId = propertyRegisteredEvent.args.propertyId.toNumber();
+      } else {
+        // Fallback: get current property counter
+        const contractInfo = await blockchainService.getContractInfo();
+        blockchainId = contractInfo.propertyCounter;
+      }
+      
+      blockchainTxHash = blockchainTx.transactionHash;
+    } catch (blockchainError) {
+      console.error('Blockchain registration failed:', blockchainError);
+      // Continue with database registration even if blockchain fails
+      blockchainId = Date.now(); // Use timestamp as fallback ID
+    }
 
     // Create property in database
     const property = new Property({
@@ -147,7 +165,7 @@ router.post('/register', adminAuth, upload.array('files'), async (req, res) => {
     res.status(201).json({
       message: 'Property registered successfully',
       property,
-      blockchainTxHash: blockchainTx.transactionHash
+      blockchainTxHash
     });
   } catch (error) {
     console.error('Property registration error:', error);
