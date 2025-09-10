@@ -8,33 +8,45 @@ const router = express.Router();
 // Register user
 router.post('/register', async (req, res) => {
   try {
-    const { fullName, email, password, walletAddress, role = 'USER' } = req.body;
+    const { fullName, email, password, walletAddress, role } = req.body;
 
     // Hardcoded admin emails with full rights
     const adminEmails = ['admin@landregistry.com', 'superadmin@landregistry.com'];
     const isHardcodedAdmin = adminEmails.includes(email.toLowerCase());
     
+    // Determine role - only allow ADMIN for hardcoded emails
+    const userRole = isHardcodedAdmin ? 'ADMIN' : 'USER';
+    
     // Check if user already exists
-    const existingUser = await User.findOne({ 
-      $or: [{ email }, { walletAddress }] 
-    });
+    const query = { email };
+    if (walletAddress) {
+      query.$or = [{ email }, { walletAddress }];
+    }
+    
+    const existingUser = await User.findOne(query);
 
     if (existingUser) {
       return res.status(400).json({ 
-        message: 'User already exists with this email or wallet address' 
+        message: existingUser.email === email 
+          ? 'User already exists with this email address'
+          : 'User already exists with this wallet address'
       });
     }
 
     // Create new user
-    const user = new User({
+    const userData = {
       fullName,
       email,
       password,
-      walletAddress,
-      role: isHardcodedAdmin ? 'ADMIN' : role,
-      verificationStatus: isHardcodedAdmin ? 'VERIFIED' : 'PENDING',
-      isVerified: isHardcodedAdmin
-    });
+      role: userRole
+    };
+    
+    // Add wallet address if provided
+    if (walletAddress) {
+      userData.walletAddress = walletAddress;
+    }
+    
+    const user = new User(userData);
 
     await user.save();
 
@@ -53,12 +65,21 @@ router.post('/register', async (req, res) => {
         fullName: user.fullName,
         email: user.email,
         walletAddress: user.walletAddress,
-        role: user.role
+        role: user.role,
+        verificationStatus: user.verificationStatus,
+        isVerified: user.isVerified
       }
     });
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ message: 'Server error during registration' });
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      res.status(400).json({ 
+        message: `User already exists with this ${field === 'walletAddress' ? 'wallet address' : field}` 
+      });
+    } else {
+      res.status(500).json({ message: 'Server error during registration' });
+    }
   }
 });
 
@@ -67,10 +88,17 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password, walletAddress } = req.body;
 
-    // Find user by email or wallet address
-    const user = await User.findOne({ 
-      $or: [{ email }, { walletAddress }] 
-    });
+    // Build query - prioritize email if provided
+    let query = {};
+    if (email) {
+      query.email = email;
+    } else if (walletAddress) {
+      query.walletAddress = walletAddress;
+    } else {
+      return res.status(400).json({ message: 'Email or wallet address is required' });
+    }
+    
+    const user = await User.findOne(query);
 
     if (!user) {
       return res.status(400).json({ message: 'Invalid credentials' });
@@ -97,7 +125,9 @@ router.post('/login', async (req, res) => {
         fullName: user.fullName,
         email: user.email,
         walletAddress: user.walletAddress,
-        role: user.role
+        role: user.role,
+        verificationStatus: user.verificationStatus,
+        isVerified: user.isVerified
       }
     });
   } catch (error) {

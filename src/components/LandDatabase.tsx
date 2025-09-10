@@ -69,6 +69,11 @@ const LandDatabase: React.FC = () => {
 
   const handleClaimOwnership = async (landId: string) => {
     try {
+      if (auth.user?.verificationStatus !== 'VERIFIED') {
+        setError('You must be verified to claim land ownership. Please complete your verification first.');
+        return;
+      }
+      
       await apiService.claimLandOwnership(landId);
       loadLands();
     } catch (error: any) {
@@ -91,6 +96,21 @@ const LandDatabase: React.FC = () => {
       loadLands();
     } catch (error: any) {
       setError(error.message || 'Failed to list land for sale');
+    }
+  };
+  
+  const handleSearchById = async (assetId: string) => {
+    try {
+      setLoading(true);
+      const response = await apiService.searchLand(assetId);
+      setLands([response.land]);
+      setFilteredLands([response.land]);
+    } catch (error: any) {
+      setError(error.message || 'Land not found');
+      setLands([]);
+      setFilteredLands([]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -137,11 +157,62 @@ const LandDatabase: React.FC = () => {
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded-md">
           {error}
+          <button 
+            onClick={() => setError('')}
+            className="ml-2 text-red-800 hover:text-red-900"
+          >
+            ×
+          </button>
         </div>
       )}
 
       {/* Search and Filters */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        {/* Asset ID Search */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Search by Asset ID
+          </label>
+          <div className="flex space-x-2">
+            <input
+              type="text"
+              placeholder="Enter Asset ID (e.g., KA001123456)"
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              onKeyPress={(e) => {
+                if (e.key === 'Enter') {
+                  const target = e.target as HTMLInputElement;
+                  if (target.value.trim()) {
+                    handleSearchById(target.value.trim());
+                  }
+                }
+              }}
+            />
+            <button
+              onClick={() => {
+                const input = document.querySelector('input[placeholder*="Asset ID"]') as HTMLInputElement;
+                if (input?.value.trim()) {
+                  handleSearchById(input.value.trim());
+                }
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+            >
+              Search
+            </button>
+            <button
+              onClick={() => {
+                const input = document.querySelector('input[placeholder*="Asset ID"]') as HTMLInputElement;
+                if (input) input.value = '';
+                setSearchTerm('');
+                setFilters({ district: '', state: '', landType: '', status: '' });
+                loadLands();
+              }}
+              className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+        </div>
+        
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="lg:col-span-2">
             <div className="relative">
@@ -150,7 +221,7 @@ const LandDatabase: React.FC = () => {
               </div>
               <input
                 type="text"
-                placeholder="Search by Asset ID, Village, District, Survey Number..."
+                placeholder="Search by Village, District, Survey Number..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="block w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
@@ -168,6 +239,8 @@ const LandDatabase: React.FC = () => {
             <option value="Maharashtra">Maharashtra</option>
             <option value="Tamil Nadu">Tamil Nadu</option>
             <option value="Gujarat">Gujarat</option>
+            <option value="Rajasthan">Rajasthan</option>
+            <option value="Uttar Pradesh">Uttar Pradesh</option>
           </select>
 
           <select
@@ -180,6 +253,7 @@ const LandDatabase: React.FC = () => {
             <option value="RESIDENTIAL">Residential</option>
             <option value="COMMERCIAL">Commercial</option>
             <option value="INDUSTRIAL">Industrial</option>
+            <option value="GOVERNMENT">Government</option>
           </select>
 
           <select
@@ -192,6 +266,7 @@ const LandDatabase: React.FC = () => {
             <option value="FOR_SALE">For Sale</option>
             <option value="UNDER_TRANSACTION">Under Transaction</option>
             <option value="SOLD">Sold</option>
+            <option value="DISPUTED">Disputed</option>
           </select>
         </div>
       </div>
@@ -266,6 +341,11 @@ const LandDatabase: React.FC = () => {
                     <p className="text-sm font-medium text-yellow-800">
                       No current owner assigned
                     </p>
+                    {auth.user?.verificationStatus !== 'VERIFIED' && (
+                      <p className="text-xs text-yellow-600 mt-1">
+                        Complete verification to claim ownership
+                      </p>
+                    )}
                   </div>
                 )}
 

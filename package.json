@@ -4,17 +4,18 @@
   "version": "1.0.0",
   "scripts": {
     "dev": "concurrently \"npm run server:dev\" \"npm run client:dev\"",
-    "dev:setup": "npm run blockchain:node & sleep 5 && npm run blockchain:setup && npm run dev",
-    "blockchain:setup": "npx hardhat run scripts/local-setup.js --network localhost",
+    "dev:setup": "npm run blockchain:deploy:ganache && npm run dev",
+    "blockchain:setup": "npx hardhat run scripts/ganache-setup.js --network ganache",
     "blockchain:deploy": "npx hardhat run scripts/deploy.js",
-    "blockchain:node": "npx hardhat node",
+    "blockchain:deploy:ganache": "npx hardhat run scripts/deploy.js --network ganache",
     "blockchain:compile": "npx hardhat compile",
     "server:dev": "cd server && node server.js",
     "client:dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "setup": "echo 'Setting up environment...' && npm install && node scripts/setup-env.js"
+    "setup": "echo 'Setting up environment...' && npm install && node scripts/setup-env.js",
+    "db:seed": "node scripts/seed-admin.js"
   },
   "dependencies": {
     "axios": "^1.11.0",

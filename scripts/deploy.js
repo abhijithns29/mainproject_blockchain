@@ -15,17 +15,25 @@ async function main() {
 
   // Wait for a few confirmations
   console.log("Waiting for confirmations...");
-  await landRegistry.deployTransaction.wait(2);
+  await landRegistry.deployTransaction.wait(1);
 
   console.log("Contract deployed successfully!");
   console.log("Contract address:", landRegistry.address);
-  console.log("Add this to your .env file:");
+  console.log("\n=== IMPORTANT: Update your environment files ===");
   console.log(`CONTRACT_ADDRESS=${landRegistry.address}`);
+  console.log(`VITE_CONTRACT_ADDRESS=${landRegistry.address}`);
+  console.log("\nAdd CONTRACT_ADDRESS to your .env file");
+  console.log("Add VITE_CONTRACT_ADDRESS to your .env.local file");
 
   // Verify the deployer is an admin
   const [deployer] = await ethers.getSigners();
   const isAdmin = await landRegistry.admins(deployer.address);
+  console.log("\nDeployer address:", deployer.address);
   console.log("Deployer is admin:", isAdmin);
+  
+  // Get network info
+  const network = await ethers.provider.getNetwork();
+  console.log("Network:", network.name, "Chain ID:", network.chainId);
 }
 
 main()

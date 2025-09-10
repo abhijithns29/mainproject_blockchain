@@ -119,10 +119,18 @@ landSchema.pre('save', function(next) {
   if (!this.assetId) {
     const stateCode = this.state.substring(0, 2).toUpperCase();
     const districtCode = this.district.substring(0, 3).toUpperCase();
-    const randomNum = Math.floor(Math.random() * 1000000).toString().padStart(6, '0');
-    this.assetId = `${stateCode}${districtCode}${randomNum}`;
+    const timestamp = Date.now().toString().slice(-6);
+    const randomNum = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+    this.assetId = `${stateCode}${districtCode}${timestamp}${randomNum}`;
   }
   next();
 });
+
+// Add index for faster searches
+landSchema.index({ assetId: 1 });
+landSchema.index({ village: 1, district: 1, state: 1 });
+landSchema.index({ 'marketInfo.isForSale': 1 });
+landSchema.index({ currentOwner: 1 });
+landSchema.index({ verificationStatus: 1 });
 
 module.exports = mongoose.model('Land', landSchema);

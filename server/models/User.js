@@ -17,8 +17,9 @@ const userSchema = new mongoose.Schema({
   },
   walletAddress: {
     type: String,
-    required: true,
-    unique: true
+    required: false,
+    unique: true,
+    sparse: true
   },
   role: {
     type: String,
@@ -27,7 +28,9 @@ const userSchema = new mongoose.Schema({
   },
   isVerified: {
     type: Boolean,
-    default: false
+    default: function() {
+      return this.role === 'ADMIN';
+    }
   },
   // User verification documents
   verificationDocuments: {
@@ -55,7 +58,9 @@ const userSchema = new mongoose.Schema({
   verificationStatus: {
     type: String,
     enum: ['PENDING', 'VERIFIED', 'REJECTED'],
-    default: 'PENDING'
+    default: function() {
+      return this.role === 'ADMIN' ? 'VERIFIED' : 'PENDING';
+    }
   },
   verifiedBy: {
     type: mongoose.Schema.Types.ObjectId,
@@ -81,9 +86,32 @@ const userSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// Pre-save middleware to set admin defaults
 userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) return next();
+  // Hash password if modified
+  if (!this.isModified('password')) {
+    // Set admin defaults if role is ADMIN
+    if (this.role === 'ADMIN') {
+      this.isVerified = true;
+      this.verificationStatus = 'VERIFIED';
+      if (!this.verificationDate) {
+        this.verificationDate = new Date();
+      }
+    }
+    return next();
+  }
+  
   this.password = await bcrypt.hash(this.password, 12);
+  
+  // Set admin defaults if role is ADMIN
+  if (this.role === 'ADMIN') {
+    this.isVerified = true;
+    this.verificationStatus = 'VERIFIED';
+    if (!this.verificationDate) {
+      this.verificationDate = new Date();
+    }
+  }
+  
   next();
 });
 

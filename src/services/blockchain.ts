@@ -73,6 +73,19 @@ class BlockchainService {
 
       const address = await this.signer.getAddress();
       const network = await this.provider.getNetwork();
+      
+      // Check if we're on Ganache network
+      if (network.chainId !== 5777) {
+        console.warn(`Connected to chain ID ${network.chainId}, but expected Ganache (5777)`);
+        // Try to switch to Ganache
+        try {
+          await this.switchToGanache();
+          const newNetwork = await this.provider.getNetwork();
+          console.log('Switched to Ganache network');
+        } catch (switchError) {
+          console.warn('Could not switch to Ganache network:', switchError);
+        }
+      }
 
       // Initialize contract if address is available
       if (this.contractAddress) {
@@ -81,19 +94,63 @@ class BlockchainService {
           this.contractABI,
           this.signer
         );
+        
+        // Verify contract exists
+        try {
+          const code = await this.provider.getCode(this.contractAddress);
+          if (code === '0x') {
+            console.warn('Contract not deployed at specified address');
+          }
+        } catch (error) {
+          console.warn('Could not verify contract deployment:', error);
+        }
       }
 
       console.log('Wallet connected:', address);
-      console.log('Network:', network.name, network.chainId);
+      console.log('Network Chain ID:', network.chainId);
 
       return {
         address,
-        network: network.name,
+        network: network.chainId === 5777 ? 'Ganache Local' : network.name || 'Unknown',
         chainId: network.chainId
       };
     } catch (error) {
       console.error('Failed to connect wallet:', error);
       throw error;
+    }
+  }
+  
+  async switchToGanache() {
+    if (!window.ethereum) {
+      throw new Error('MetaMask is not installed');
+    }
+
+    try {
+      // Try to switch to Ganache network
+      await window.ethereum.request({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x1695' }], // 5777 in hex
+      });
+    } catch (error: any) {
+      // Network not added to MetaMask, add it
+      if (error.code === 4902) {
+        await window.ethereum.request({
+          method: 'wallet_addEthereumChain',
+          params: [{
+            chainId: '0x1695', // 5777 in hex
+            chainName: 'Ganache Local',
+            rpcUrls: ['http://127.0.0.1:7545'],
+            nativeCurrency: {
+              name: 'Ethereum',
+              symbol: 'ETH',
+              decimals: 18,
+            },
+            blockExplorerUrls: null,
+          }],
+        });
+      } else {
+        throw error;
+      }
     }
   }
 
@@ -235,65 +292,6 @@ class BlockchainService {
       console.error('Error checking admin status:', error);
       return false;
     }
-  }
-
-  async switchToChain(chainId: number) {
-    if (!window.ethereum) {
-      throw new Error('MetaMask is not installed');
-    }
-
-    try {
-      await window.ethereum.request({
-        method: 'wallet_switchEthereumChain',
-        params: [{ chainId: `0x${chainId.toString(16)}` }],
-      });
-    } catch (error: any) {
-      // Chain not added to MetaMask
-      if (error.code === 4902) {
-        await this.addChain(chainId);
-      } else {
-        throw error;
-      }
-    }
-  }
-
-  private async addChain(chainId: number) {
-    const chainData: { [key: number]: any } = {
-      1337: { // Local Hardhat
-        chainName: 'Hardhat Local',
-        rpcUrls: ['http://localhost:8545'],
-        nativeCurrency: {
-          name: 'Ethereum',
-          symbol: 'ETH',
-          decimals: 18,
-        },
-        blockExplorerUrls: null,
-      },
-      11155111: { // Sepolia testnet
-        chainName: 'Sepolia Test Network',
-        rpcUrls: ['https://sepolia.infura.io/v3/'],
-        nativeCurrency: {
-          name: 'SepoliaETH',
-          symbol: 'ETH',
-          decimals: 18,
-        },
-        blockExplorerUrls: ['https://sepolia.etherscan.io'],
-      },
-    };
-
-    if (!chainData[chainId]) {
-      throw new Error('Unsupported chain');
-    }
-
-    await window.ethereum.request({
-      method: 'wallet_addEthereumChain',
-      params: [
-        {
-          chainId: `0x${chainId.toString(16)}`,
-          ...chainData[chainId],
-        },
-      ],
-    });
   }
 
   private getTransactionTypeNumber(type: string): number {

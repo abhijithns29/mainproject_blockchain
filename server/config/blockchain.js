@@ -43,12 +43,20 @@ class BlockchainService {
   async initialize() {
     try {
       // Connect to Ethereum network
-      const rpcUrl = process.env.RPC_URL || 'http://localhost:8545';
+      const rpcUrl = process.env.RPC_URL || 'http://127.0.0.1:7545';
       this.provider = new ethers.providers.JsonRpcProvider(rpcUrl);
 
       // Test connection
       const network = await this.provider.getNetwork();
-      console.log(`Connected to network: ${network.name} (${network.chainId})`);
+      console.log(`Connected to blockchain network: Chain ID ${network.chainId}`);
+      
+      if (network.chainId === 5777) {
+        console.log('✅ Connected to Ganache local network');
+      } else if (network.chainId === 1337) {
+        console.log('✅ Connected to Hardhat local network');
+      } else {
+        console.log(`✅ Connected to network: ${network.name}`);
+      }
 
       // Create wallet from private key
       const privateKey = process.env.ADMIN_PRIVATE_KEY;
@@ -58,10 +66,15 @@ class BlockchainService {
 
       this.wallet = new ethers.Wallet(privateKey, this.provider);
       console.log(`Admin wallet address: ${this.wallet.address}`);
+      
+      // Check wallet balance
+      const balance = await this.provider.getBalance(this.wallet.address);
+      console.log(`Admin wallet balance: ${ethers.utils.formatEther(balance)} ETH`);
 
       // Initialize contract
       if (!this.contractAddress) {
-        console.warn('CONTRACT_ADDRESS not found. Please deploy the contract first.');
+        console.warn('⚠️  CONTRACT_ADDRESS not found. Please deploy the contract first.');
+        console.warn('Run: npm run blockchain:deploy:ganache');
         return;
       }
 
@@ -74,17 +87,21 @@ class BlockchainService {
       // Verify contract is deployed
       const code = await this.provider.getCode(this.contractAddress);
       if (code === '0x') {
-        throw new Error('Contract not found at the specified address');
+        throw new Error(`Contract not found at address: ${this.contractAddress}`);
       }
 
       // Verify admin status
       const isAdmin = await this.contract.admins(this.wallet.address);
-      console.log(`Wallet is admin: ${isAdmin}`);
+      console.log(`Admin wallet status: ${isAdmin ? '✅ Verified Admin' : '❌ Not Admin'}`);
 
       console.log('✅ Blockchain service initialized successfully');
     } catch (error) {
       console.error('❌ Failed to initialize blockchain service:', error.message);
-      throw error;
+      if (error.message.includes('CONTRACT_ADDRESS')) {
+        console.log('💡 Solution: Deploy the contract first with: npm run blockchain:deploy:ganache');
+      }
+      // Don't throw error to allow server to start without blockchain
+      console.warn('⚠️  Server starting without blockchain connection');
     }
   }
 

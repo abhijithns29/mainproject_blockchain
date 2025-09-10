@@ -110,7 +110,8 @@ router.get('/', async (req, res) => {
       landType, 
       isForSale, 
       assetId,
-      village 
+      village,
+      verificationStatus
     } = req.query;
 
     const query = {};
@@ -120,6 +121,7 @@ router.get('/', async (req, res) => {
     if (landType) query.landType = landType;
     if (isForSale === 'true') query['marketInfo.isForSale'] = true;
     if (assetId) query.assetId = assetId;
+    if (verificationStatus) query.verificationStatus = verificationStatus;
 
     const lands = await Land.find(query)
       .populate('currentOwner', 'fullName email')
@@ -146,9 +148,12 @@ router.get('/', async (req, res) => {
 router.get('/search/:assetId', async (req, res) => {
   try {
     const { assetId } = req.params;
-    const land = await Land.findOne({ assetId })
+    const land = await Land.findOne({ 
+      assetId: new RegExp(`^${assetId}$`, 'i') 
+    })
       .populate('currentOwner', 'fullName email walletAddress')
-      .populate('addedBy', 'fullName');
+      .populate('addedBy', 'fullName')
+      .populate('verifiedBy', 'fullName');
 
     if (!land) {
       return res.status(404).json({ message: 'Land not found' });
@@ -157,6 +162,26 @@ router.get('/search/:assetId', async (req, res) => {
     res.json({ land });
   } catch (error) {
     console.error('Search land error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get land by ID
+router.get('/:landId', async (req, res) => {
+  try {
+    const { landId } = req.params;
+    const land = await Land.findById(landId)
+      .populate('currentOwner', 'fullName email walletAddress')
+      .populate('addedBy', 'fullName')
+      .populate('verifiedBy', 'fullName');
+
+    if (!land) {
+      return res.status(404).json({ message: 'Land not found' });
+    }
+
+    res.json({ land });
+  } catch (error) {
+    console.error('Get land error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
