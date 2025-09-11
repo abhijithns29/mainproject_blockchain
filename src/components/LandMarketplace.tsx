@@ -104,6 +104,19 @@ const LandMarketplace: React.FC = () => {
     setFilters(prev => ({ ...prev, [key]: value }));
   };
 
+  const handlePurchaseLand = async (landId: string) => {
+    const offerPrice = prompt('Enter your offer price (₹):');
+    if (offerPrice && !isNaN(parseFloat(offerPrice))) {
+      try {
+        await apiService.purchaseLand(landId, parseFloat(offerPrice));
+        alert('Purchase request submitted successfully! Admin will review your request.');
+        loadLandsForSale();
+      } catch (error: any) {
+        setError(error.message || 'Failed to submit purchase request');
+      }
+    }
+  };
+
   const handleStartChat = async (landId: string) => {
     try {
       const response = await apiService.startChat(landId);
@@ -209,11 +222,11 @@ const LandMarketplace: React.FC = () => {
 
           {showChatButton && land.currentOwner && land.currentOwner.id !== auth.user?.id && (
             <button
-              onClick={() => handleStartChat(land.id)}
+              onClick={() => handlePurchaseLand(land.id)}
               className="flex-1 inline-flex items-center justify-center px-3 py-2 border border-transparent rounded-md text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 transition-colors"
             >
-              <MessageCircle className="h-4 w-4 mr-1" />
-              Chat with Seller
+              <ShoppingCart className="h-4 w-4 mr-1" />
+              Purchase Land
             </button>
           )}
 

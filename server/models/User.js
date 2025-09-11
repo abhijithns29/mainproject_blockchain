@@ -26,12 +26,6 @@ const userSchema = new mongoose.Schema({
     enum: ['USER', 'ADMIN'],
     default: 'USER'
   },
-  isVerified: {
-    type: Boolean,
-    default: function() {
-      return this.role === 'ADMIN';
-    }
-  },
   // User verification documents
   verificationDocuments: {
     panCard: {
@@ -78,34 +72,23 @@ const userSchema = new mongoose.Schema({
     },
     profileImage: String
   },
-  ownedProperties: [{
+  ownedLands: [{
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'Property'
+    ref: 'Land'
   }]
 }, {
   timestamps: true
 });
 
-// Pre-save middleware to set admin defaults
+// Pre-save middleware
 userSchema.pre('save', async function(next) {
   // Hash password if modified
-  if (!this.isModified('password')) {
-    // Set admin defaults if role is ADMIN
-    if (this.role === 'ADMIN') {
-      this.isVerified = true;
-      this.verificationStatus = 'VERIFIED';
-      if (!this.verificationDate) {
-        this.verificationDate = new Date();
-      }
-    }
-    return next();
+  if (this.isModified('password')) {
+    this.password = await bcrypt.hash(this.password, 12);
   }
-  
-  this.password = await bcrypt.hash(this.password, 12);
   
   // Set admin defaults if role is ADMIN
   if (this.role === 'ADMIN') {
-    this.isVerified = true;
     this.verificationStatus = 'VERIFIED';
     if (!this.verificationDate) {
       this.verificationDate = new Date();

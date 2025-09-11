@@ -267,9 +267,16 @@ class ApiService {
 
   // Land transaction endpoints
   async initiateLandTransaction(chatId: string) {
-    return this.request('/land-transactions/initiate', {
+    return this.request('/land-transactions/purchase', {
       method: 'POST',
-      body: JSON.stringify({ chatId }),
+      body: JSON.stringify({ chatId })
+    });
+  }
+
+  async purchaseLand(landId: string, offerPrice: number) {
+    return this.request(`/lands/${landId}/purchase`, {
+      method: 'POST',
+      body: JSON.stringify({ offerPrice })
     });
   }
 

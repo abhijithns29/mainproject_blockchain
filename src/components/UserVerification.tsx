@@ -44,8 +44,26 @@ const UserVerification: React.FC = () => {
     });
   };
 
+  const canSubmit = () => {
+    // Check if at least one document is provided with its number
+    const hasValidDoc = (
+      (formData.panNumber && files.panCard) ||
+      (formData.aadhaarNumber && files.aadhaarCard) ||
+      (formData.dlNumber && files.drivingLicense) ||
+      (formData.passportNumber && files.passport)
+    );
+    
+    return hasValidDoc && !loading && auth.user?.verificationStatus !== 'PENDING';
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!canSubmit()) {
+      setError('Please provide at least one document with its number');
+      return;
+    }
+
     setLoading(true);
     setError('');
     setSuccess('');
@@ -54,17 +72,22 @@ const UserVerification: React.FC = () => {
       const formDataToSend = new FormData();
       
       // Add document numbers
-      if (formData.panNumber) formDataToSend.append('panNumber', formData.panNumber);
-      if (formData.aadhaarNumber) formDataToSend.append('aadhaarNumber', formData.aadhaarNumber);
-      if (formData.dlNumber) formDataToSend.append('dlNumber', formData.dlNumber);
-      if (formData.passportNumber) formDataToSend.append('passportNumber', formData.passportNumber);
-
-      // Add files
-      Object.entries(files).forEach(([key, file]) => {
-        if (file) {
-          formDataToSend.append(key, file);
-        }
-      });
+      if (formData.panNumber && files.panCard) {
+        formDataToSend.append('panNumber', formData.panNumber);
+        formDataToSend.append('panCard', files.panCard);
+      }
+      if (formData.aadhaarNumber && files.aadhaarCard) {
+        formDataToSend.append('aadhaarNumber', formData.aadhaarNumber);
+        formDataToSend.append('aadhaarCard', files.aadhaarCard);
+      }
+      if (formData.dlNumber && files.drivingLicense) {
+        formDataToSend.append('dlNumber', formData.dlNumber);
+        formDataToSend.append('drivingLicense', files.drivingLicense);
+      }
+      if (formData.passportNumber && files.passport) {
+        formDataToSend.append('passportNumber', formData.passportNumber);
+        formDataToSend.append('passport', files.passport);
+      }
 
       await apiService.submitVerificationDocuments(formDataToSend);
       setSuccess('Verification documents submitted successfully! Please wait for admin approval.');
@@ -82,6 +105,12 @@ const UserVerification: React.FC = () => {
         drivingLicense: null,
         passport: null
       });
+
+      // Reload page to update user status
+      setTimeout(() => {
+        window.location.reload();
+      }, 2000);
+
     } catch (error: any) {
       setError(error.message || 'Failed to submit verification documents');
     } finally {
@@ -125,7 +154,7 @@ const UserVerification: React.FC = () => {
               <span className="text-red-800 font-medium">Verification Rejected</span>
             </div>
             <p className="text-red-700 mt-1">
-              {auth.user.rejectionReason || 'Your verification was rejected. Please contact support.'}
+              {auth.user.rejectionReason || 'Your verification was rejected. Please contact support or resubmit with correct documents.'}
             </p>
           </div>
         );
@@ -133,6 +162,27 @@ const UserVerification: React.FC = () => {
         return null;
     }
   };
+
+  // Don't show verification form for admins
+  if (auth.user?.role === 'ADMIN') {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Account Verification</h1>
+          <p className="mt-1 text-sm text-gray-500">Administrator account verification status</p>
+        </div>
+        <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
+          <div className="flex items-center">
+            <CheckCircle className="h-5 w-5 text-blue-500 mr-2" />
+            <span className="text-blue-800 font-medium">Administrator Account</span>
+          </div>
+          <p className="text-blue-700 mt-1">
+            Administrator accounts are automatically verified and do not require document submission.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   if (auth.user?.verificationStatus === 'VERIFIED') {
     return (
@@ -170,6 +220,12 @@ const UserVerification: React.FC = () => {
       )}
 
       <form onSubmit={handleSubmit} className="bg-white shadow-sm rounded-lg p-6 space-y-6">
+        <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6">
+          <p className="text-blue-800 text-sm">
+            <strong>Note:</strong> Please provide at least one identity document with its number to proceed with verification.
+          </p>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* PAN Card */}
           <div className="space-y-4">
@@ -241,7 +297,6 @@ const UserVerification: React.FC = () => {
                 onChange={handleInputChange}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="1234 5678 9012"
-                pattern="[0-9]{4}\s[0-9]{4}\s[0-9]{4}"
               />
             </div>
             <div>
@@ -385,8 +440,12 @@ const UserVerification: React.FC = () => {
         <div className="flex justify-end pt-6 border-t">
           <button
             type="submit"
-            disabled={loading || auth.user?.verificationStatus === 'PENDING'}
-            className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            disabled={!canSubmit()}
+            className={`px-6 py-2 rounded-md font-medium transition-colors ${
+              canSubmit()
+                ? 'bg-blue-600 text-white hover:bg-blue-700'
+                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+            }`}
           >
             {loading ? (
               <div className="flex items-center">

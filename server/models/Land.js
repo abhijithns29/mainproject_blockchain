@@ -32,9 +32,9 @@ const landSchema = new mongoose.Schema({
     required: true
   },
   area: {
-    acres: Number,
-    guntas: Number,
-    sqft: Number
+    acres: { type: Number, default: 0 },
+    guntas: { type: Number, default: 0 },
+    sqft: { type: Number, default: 0 }
   },
   boundaries: {
     north: String,
@@ -60,18 +60,19 @@ const landSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
     },
-    ownerName: String, // For cases where owner is not in system
-    fromDate: Date,
+    ownerName: String,
+    fromDate: { type: Date, default: Date.now },
     toDate: Date,
     documentReference: String
   }],
   originalDocuments: [{
     type: {
       type: String,
-      enum: ['SALE_DEED', 'PATTA', 'KHATA', 'SURVEY_SETTLEMENT', 'MUTATION', 'OTHER']
+      enum: ['SALE_DEED', 'PATTA', 'KHATA', 'SURVEY_SETTLEMENT', 'MUTATION', 'OTHER'],
+      default: 'OTHER'
     },
     documentNumber: String,
-    date: Date,
+    date: { type: Date, default: Date.now },
     registrationOffice: String,
     documentUrl: String,
     ipfsHash: String
@@ -126,7 +127,7 @@ landSchema.pre('save', function(next) {
   next();
 });
 
-// Add index for faster searches
+// Add indexes for faster searches
 landSchema.index({ assetId: 1 });
 landSchema.index({ village: 1, district: 1, state: 1 });
 landSchema.index({ 'marketInfo.isForSale': 1 });

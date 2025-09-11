@@ -1,7 +1,6 @@
 const express = require('express');
 const multer = require('multer');
 const LandTransaction = require('../models/LandTransaction');
-const Chat = require('../models/Chat');
 const Land = require('../models/Land');
 const User = require('../models/User');
 const { auth, adminAuth } = require('../middleware/auth');
@@ -12,114 +11,13 @@ const QRCode = require('qrcode');
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Initiate land transaction
-router.post('/initiate', auth, async (req, res) => {
-  try {
-    const { chatId } = req.body;
-    
-    const chat = await Chat.findById(chatId)
-      .populate('landId')
-      .populate('buyer')
-      .populate('seller');
-
-    if (!chat) {
-      return res.status(404).json({ message: 'Chat not found' });
-    }
-
-    if (chat.status !== 'DEAL_AGREED') {
-      return res.status(400).json({ message: 'Deal must be agreed upon before initiating transaction' });
-    }
-
-    // Check if user is part of this chat
-    if (chat.buyer._id.toString() !== req.user._id.toString() && 
-        chat.seller._id.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
-    // Check if transaction already exists
-    const existingTransaction = await LandTransaction.findOne({ chatId });
-    if (existingTransaction) {
-      return res.status(400).json({ message: 'Transaction already initiated for this deal' });
-    }
-
-    const transaction = new LandTransaction({
-      landId: chat.landId._id,
-      chatId: chat._id,
-      seller: chat.seller._id,
-      buyer: chat.buyer._id,
-      agreedPrice: chat.agreedPrice,
-      transactionType: 'SALE'
-    });
-
-    await transaction.save();
-
-    // Update land status
-    const land = await Land.findById(chat.landId._id);
-    land.status = 'UNDER_TRANSACTION';
-    await land.save();
-
-    // Update chat status
-    chat.status = 'COMPLETED';
-    await chat.save();
-
-    res.json({
-      message: 'Land transaction initiated successfully',
-      transaction
-    });
-  } catch (error) {
-    console.error('Initiate transaction error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Submit transaction documents
-router.post('/:transactionId/documents', auth, upload.array('documents'), async (req, res) => {
-  try {
-    const transaction = await LandTransaction.findById(req.params.transactionId);
-    if (!transaction) {
-      return res.status(404).json({ message: 'Transaction not found' });
-    }
-
-    // Check if user is part of this transaction
-    if (transaction.buyer.toString() !== req.user._id.toString() && 
-        transaction.seller.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Access denied' });
-    }
-
-    const documents = [];
-    if (req.files && req.files.length > 0) {
-      for (const file of req.files) {
-        const ipfsHash = await ipfsService.uploadFile(file.buffer, file.originalname);
-        documents.push({
-          type: file.originalname.split('.')[0].toUpperCase(),
-          url: ipfsService.getFileUrl(ipfsHash),
-          ipfsHash,
-          uploadedBy: req.user._id
-        });
-      }
-    }
-
-    transaction.documents.push(...documents);
-    transaction.status = 'DOCUMENTS_SUBMITTED';
-    await transaction.save();
-
-    res.json({
-      message: 'Documents submitted successfully',
-      documents
-    });
-  } catch (error) {
-    console.error('Submit documents error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
 // Get pending transactions for admin review
 router.get('/pending-review', adminAuth, async (req, res) => {
   try {
     const transactions = await LandTransaction.find({
-      status: { $in: ['DOCUMENTS_SUBMITTED', 'UNDER_REVIEW'] }
+      status: { $in: ['INITIATED', 'DOCUMENTS_SUBMITTED', 'UNDER_REVIEW'] }
     })
-    .populate('landId', 'assetId village district state area')
+    .populate('landId', 'assetId village district state area marketInfo')
     .populate('buyer', 'fullName email')
     .populate('seller', 'fullName email')
     .sort({ createdAt: -1 });
@@ -134,7 +32,7 @@ router.get('/pending-review', adminAuth, async (req, res) => {
 // Review transaction (Admin only)
 router.put('/:transactionId/review', adminAuth, async (req, res) => {
   try {
-    const { action, comments, rejectionReason } = req.body; // action: 'approve' or 'reject'
+    const { action, comments, rejectionReason } = req.body;
     
     const transaction = await LandTransaction.findById(req.params.transactionId)
       .populate('landId')
@@ -192,12 +90,28 @@ router.put('/:transactionId/review', adminAuth, async (req, res) => {
           registrationNumber: `REG-${Date.now()}`,
           registrationDate: new Date(),
           registrationOffice: `${land.district} Sub-Registrar Office`,
-          stampDuty: transaction.agreedPrice * 0.05, // 5% stamp duty
-          registrationFee: 1000 // Fixed registration fee
+          stampDuty: transaction.agreedPrice * 0.05,
+          registrationFee: 1000
         }
       };
 
       // Update land ownership
+      const oldOwner = await User.findById(land.currentOwner);
+      const newOwner = await User.findById(transaction.buyer._id);
+
+      // Remove from old owner
+      if (oldOwner) {
+        oldOwner.ownedLands = oldOwner.ownedLands.filter(
+          landId => landId.toString() !== land._id.toString()
+        );
+        await oldOwner.save();
+      }
+
+      // Add to new owner
+      newOwner.ownedLands.push(land._id);
+      await newOwner.save();
+
+      // Update land
       land.currentOwner = transaction.buyer._id;
       land.status = 'AVAILABLE';
       land.marketInfo.isForSale = false;
@@ -209,30 +123,9 @@ router.put('/:transactionId/review', adminAuth, async (req, res) => {
         documentReference: transaction._id.toString()
       });
 
-      // Update digital document
-      land.digitalDocument = {
-        qrCode: qrCodeDataURL,
-        certificateUrl: ipfsService.getFileUrl(certificateHash),
-        ipfsHash: certificateHash,
-        generatedDate: new Date(),
-        isDigitalized: true
-      };
-
       await land.save();
-
-      // Update user's owned properties
-      const buyer = await User.findById(transaction.buyer._id);
-      const seller = await User.findById(transaction.seller._id);
-      
-      buyer.ownedProperties.push(land._id);
-      seller.ownedProperties = seller.ownedProperties.filter(
-        propId => propId.toString() !== land._id.toString()
-      );
-      
-      await buyer.save();
-      await seller.save();
-
       transaction.status = 'COMPLETED';
+
     } else if (action === 'reject') {
       transaction.status = 'REJECTED';
       
@@ -302,38 +195,6 @@ router.get('/:transactionId', auth, async (req, res) => {
     res.json({ transaction });
   } catch (error) {
     console.error('Get transaction error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Verify ownership certificate
-router.get('/verify/:transactionId', async (req, res) => {
-  try {
-    const transaction = await LandTransaction.findById(req.params.transactionId)
-      .populate('landId', 'assetId village district state')
-      .populate('buyer', 'fullName email');
-
-    if (!transaction) {
-      return res.status(404).json({ message: 'Transaction not found' });
-    }
-
-    if (transaction.status !== 'COMPLETED') {
-      return res.status(400).json({ message: 'Transaction not completed' });
-    }
-
-    res.json({
-      isValid: true,
-      transaction: {
-        id: transaction._id,
-        landAssetId: transaction.landId.assetId,
-        currentOwner: transaction.buyer.fullName,
-        completionDate: transaction.completionDetails.completedDate,
-        registrationNumber: transaction.completionDetails.registrationDetails.registrationNumber,
-        certificateUrl: transaction.completionDetails.newOwnershipDocument.certificateUrl
-      }
-    });
-  } catch (error) {
-    console.error('Verify ownership error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

@@ -6,10 +6,6 @@ const landTransactionSchema = new mongoose.Schema({
     ref: 'Land',
     required: true
   },
-  chatId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Chat'
-  },
   seller: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -28,22 +24,6 @@ const landTransactionSchema = new mongoose.Schema({
     type: String,
     enum: ['SALE', 'TRANSFER', 'INHERITANCE'],
     default: 'SALE'
-  },
-  paymentDetails: {
-    method: {
-      type: String,
-      enum: ['CASH', 'BANK_TRANSFER', 'CHEQUE', 'ONLINE', 'MIXED']
-    },
-    installments: [{
-      amount: Number,
-      dueDate: Date,
-      paidDate: Date,
-      status: {
-        type: String,
-        enum: ['PENDING', 'PAID', 'OVERDUE'],
-        default: 'PENDING'
-      }
-    }]
   },
   documents: [{
     type: String,
