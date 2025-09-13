@@ -1,30 +1,39 @@
-import React, { useState } from 'react';
-import { User, Mail, Wallet, MapPin, Phone, Edit2, Save, X } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth';
+import React, { useState } from "react";
+import {
+  User,
+  Mail,
+  Wallet,
+  MapPin,
+  Phone,
+  Edit2,
+  Save,
+  X,
+} from "lucide-react";
+import { useAuth } from "../hooks/useAuth";
 
 const UserProfile: React.FC = () => {
   const { auth } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState("");
   const [formData, setFormData] = useState({
-    fullName: auth.user?.fullName || '',
-    email: auth.user?.email || '',
-    phoneNumber: auth.user?.profile?.phoneNumber || '',
+    fullName: auth.user?.fullName || "",
+    email: auth.user?.email || "",
+    phoneNumber: auth.user?.profile?.phoneNumber || "",
     address: {
-      street: auth.user?.profile?.address?.street || '',
-      city: auth.user?.profile?.address?.city || '',
-      state: auth.user?.profile?.address?.state || '',
-      zipCode: auth.user?.profile?.address?.zipCode || '',
+      street: auth.user?.profile?.address?.street || "",
+      city: auth.user?.profile?.address?.city || "",
+      state: auth.user?.profile?.address?.state || "",
+      zipCode: auth.user?.profile?.address?.zipCode || "",
     },
   });
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    
-    if (name.includes('.')) {
-      const [parent, child] = name.split('.');
-      setFormData(prev => ({
+
+    if (name.includes(".")) {
+      const [parent, child] = name.split(".");
+      setFormData((prev) => ({
         ...prev,
         [parent]: {
           ...(prev as any)[parent],
@@ -32,7 +41,7 @@ const UserProfile: React.FC = () => {
         },
       }));
     } else {
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         [name]: value,
       }));
@@ -42,28 +51,28 @@ const UserProfile: React.FC = () => {
   const handleSave = async () => {
     try {
       setLoading(true);
-      setError('');
+      setError("");
       // In a real implementation, this would save to the API
-      console.log('Saving profile:', formData);
+      console.log("Saving profile:", formData);
       setIsEditing(false);
     } catch (error: any) {
-      setError(error.message || 'Failed to save profile');
+      setError(error.message || "Failed to save profile");
     } finally {
       setLoading(false);
     }
   };
 
   const handleCancel = () => {
-    setError('');
+    setError("");
     setFormData({
-      fullName: auth.user?.fullName || '',
-      email: auth.user?.email || '',
-      phoneNumber: auth.user?.profile?.phoneNumber || '',
+      fullName: auth.user?.fullName || "",
+      email: auth.user?.email || "",
+      phoneNumber: auth.user?.profile?.phoneNumber || "",
       address: {
-        street: auth.user?.profile?.address?.street || '',
-        city: auth.user?.profile?.address?.city || '',
-        state: auth.user?.profile?.address?.state || '',
-        zipCode: auth.user?.profile?.address?.zipCode || '',
+        street: auth.user?.profile?.address?.street || "",
+        city: auth.user?.profile?.address?.city || "",
+        state: auth.user?.profile?.address?.state || "",
+        zipCode: auth.user?.profile?.address?.zipCode || "",
       },
     });
     setIsEditing(false);
@@ -106,7 +115,7 @@ const UserProfile: React.FC = () => {
               ) : (
                 <Save className="h-4 w-4 mr-2" />
               )}
-              {loading ? 'Saving...' : 'Save'}
+              {loading ? "Saving..." : "Save"}
             </button>
             <button
               onClick={handleCancel}
@@ -137,14 +146,16 @@ const UserProfile: React.FC = () => {
                 {auth.user.fullName}
               </h2>
               <p className="text-sm text-gray-500">
-                {auth.user.role === 'ADMIN' ? 'Administrator' : 'Property Owner'}
+                {auth.user.role === "ADMIN"
+                  ? "Administrator"
+                  : "Property Owner"}
               </p>
               <div className="flex items-center mt-1">
-                {auth.user.verificationStatus === 'VERIFIED' ? (
+                {auth.user.verificationStatus === "VERIFIED" ? (
                   <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
                     Verified Account
                   </span>
-                ) : auth.user.verificationStatus === 'PENDING' ? (
+                ) : auth.user.verificationStatus === "PENDING" ? (
                   <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                     Pending Verification
                   </span>
@@ -212,7 +223,9 @@ const UserProfile: React.FC = () => {
                   placeholder="Enter phone number"
                 />
               ) : (
-                <p className="text-gray-900">{auth.user.profile?.phoneNumber || 'Not provided'}</p>
+                <p className="text-gray-900">
+                  {auth.user.profile?.phoneNumber || "Not provided"}
+                </p>
               )}
             </div>
 
@@ -248,7 +261,9 @@ const UserProfile: React.FC = () => {
                     placeholder="Enter street address"
                   />
                 ) : (
-                  <p className="text-gray-900">{auth.user.profile?.address?.street || 'Not provided'}</p>
+                  <p className="text-gray-900">
+                    {auth.user.profile?.address?.street || "Not provided"}
+                  </p>
                 )}
               </div>
 
@@ -266,7 +281,9 @@ const UserProfile: React.FC = () => {
                     placeholder="Enter city"
                   />
                 ) : (
-                  <p className="text-gray-900">{auth.user.profile?.address?.city || 'Not provided'}</p>
+                  <p className="text-gray-900">
+                    {auth.user.profile?.address?.city || "Not provided"}
+                  </p>
                 )}
               </div>
 
@@ -284,7 +301,9 @@ const UserProfile: React.FC = () => {
                     placeholder="Enter state"
                   />
                 ) : (
-                  <p className="text-gray-900">{auth.user.profile?.address?.state || 'Not provided'}</p>
+                  <p className="text-gray-900">
+                    {auth.user.profile?.address?.state || "Not provided"}
+                  </p>
                 )}
               </div>
 
@@ -302,7 +321,9 @@ const UserProfile: React.FC = () => {
                     placeholder="Enter ZIP code"
                   />
                 ) : (
-                  <p className="text-gray-900">{auth.user.profile?.address?.zipCode || 'Not provided'}</p>
+                  <p className="text-gray-900">
+                    {auth.user.profile?.address?.zipCode || "Not provided"}
+                  </p>
                 )}
               </div>
             </div>
@@ -310,29 +331,33 @@ const UserProfile: React.FC = () => {
 
           {/* Account Statistics */}
           <div>
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Account Statistics</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-4">
+              Account Statistics
+            </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-blue-50 rounded-lg p-4">
                 <div className="text-2xl font-bold text-blue-600">
-                  {auth.user.ownedProperties.length}
+                  {auth.user.ownedProperties?.length ?? 0}
                 </div>
                 <div className="text-sm text-blue-600">Properties Owned</div>
               </div>
-              
+
               <div className="bg-green-50 rounded-lg p-4">
                 <div className="text-2xl font-bold text-green-600">
-                  {/* This would be calculated from transactions */}
-                  0
+                  {/* This would be calculated from transactions */}0
                 </div>
-                <div className="text-sm text-green-600">Completed Transactions</div>
+                <div className="text-sm text-green-600">
+                  Completed Transactions
+                </div>
               </div>
-              
+
               <div className="bg-yellow-50 rounded-lg p-4">
                 <div className="text-2xl font-bold text-yellow-600">
-                  {/* This would be calculated from pending transactions */}
-                  0
+                  {/* This would be calculated from pending transactions */}0
                 </div>
-                <div className="text-sm text-yellow-600">Pending Transactions</div>
+                <div className="text-sm text-yellow-600">
+                  Pending Transactions
+                </div>
               </div>
             </div>
           </div>

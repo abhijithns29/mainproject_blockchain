@@ -1,160 +1,202 @@
-import React, { useState } from 'react';
-import { Upload, FileText, CheckCircle, Clock, X, AlertTriangle } from 'lucide-react';
-import { useAuth } from '../hooks/useAuth';
-import apiService from '../services/api';
+import React, { useState } from "react";
+import {
+  Upload,
+  FileText,
+  CheckCircle,
+  Clock,
+  X,
+  AlertTriangle,
+} from "lucide-react";
+import { useAuth } from "../hooks/useAuth";
+import apiService from "../services/api";
 
 const UserVerification: React.FC = () => {
   const { auth } = useAuth();
   const [formData, setFormData] = useState({
-    panNumber: '',
-    aadhaarNumber: '',
-    dlNumber: '',
-    passportNumber: ''
+    panNumber: "",
+    aadhaarNumber: "",
+    dlNumber: "",
+    passportNumber: "",
   });
-  const [files, setFiles] = useState<{[key: string]: File | null}>({
+  const [files, setFiles] = useState<{ [key: string]: File | null }>({
     panCard: null,
     aadhaarCard: null,
     drivingLicense: null,
-    passport: null
+    passport: null,
   });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
-      [name]: value.toUpperCase()
+      [name]: value.toUpperCase(),
     }));
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, docType: string) => {
+  const handleFileChange = (
+    e: React.ChangeEvent<HTMLInputElement>,
+    docType: string
+  ) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      
+
       // Validate file size (5MB max)
       if (file.size > 5 * 1024 * 1024) {
-        setError('File size must be less than 5MB');
+        setError("File size must be less than 5MB");
         return;
       }
-      
+
       // Validate file type
-      const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+      const allowedTypes = [
+        "application/pdf",
+        "image/jpeg",
+        "image/png",
+        "image/jpg",
+      ];
       if (!allowedTypes.includes(file.type)) {
-        setError('Only PDF, JPG, and PNG files are allowed');
+        setError("Only PDF, JPG, and PNG files are allowed");
         return;
       }
-      
-      setFiles(prev => ({
+
+      setFiles((prev) => ({
         ...prev,
-        [docType]: file
+        [docType]: file,
       }));
-      setError('');
+      setError("");
     }
   };
 
   const removeFile = (docType: string) => {
-    setFiles(prev => ({
+    setFiles((prev) => ({
       ...prev,
-      [docType]: null
+      [docType]: null,
     }));
   };
 
   const validateForm = () => {
     // Check if at least one document is provided with its number
-    const hasValidDoc = (
+    const hasValidDoc =
       (formData.panNumber && files.panCard) ||
       (formData.aadhaarNumber && files.aadhaarCard) ||
       (formData.dlNumber && files.drivingLicense) ||
-      (formData.passportNumber && files.passport)
-    );
-    
+      (formData.passportNumber && files.passport);
+
     if (!hasValidDoc) {
-      setError('Please provide at least one document with its number');
+      setError("Please provide at least one document with its number");
       return false;
     }
 
     // Validate PAN format
-    if (formData.panNumber && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(formData.panNumber)) {
-      setError('Invalid PAN format. Should be like ABCDE1234F');
+    if (
+      formData.panNumber &&
+      !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(formData.panNumber)
+    ) {
+      setError("Invalid PAN format. Should be like ABCDE1234F");
       return false;
     }
 
     // Validate Aadhaar format
-    if (formData.aadhaarNumber && !/^\d{12}$/.test(formData.aadhaarNumber.replace(/\s/g, ''))) {
-      setError('Invalid Aadhaar format. Should be 12 digits');
+    if (
+      formData.aadhaarNumber &&
+      !/^\d{12}$/.test(formData.aadhaarNumber.replace(/\s/g, ""))
+    ) {
+      setError("Invalid Aadhaar format. Should be 12 digits");
       return false;
     }
 
     return true;
   };
 
+  // Only check state here, no state updates
   const canSubmit = () => {
-    return validateForm() && 
-           !loading && 
-           auth.user?.verificationStatus !== 'PENDING' &&
-           auth.user?.verificationStatus !== 'VERIFIED';
+    return (
+      !loading &&
+      auth.user?.verificationStatus !== "PENDING" &&
+      auth.user?.verificationStatus !== "VERIFIED"
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!validateForm()) {
-      return;
-    }
+
+    // Clear previous messages
+    setError("");
+    setSuccess("");
+
+    // Validate the form before sending
+    const isValid = validateForm();
+    if (!isValid) return;
 
     setLoading(true);
-    setError('');
-    setSuccess('');
 
     try {
       const formDataToSend = new FormData();
-      
-      // Add document numbers and files
+
+      // Append PAN
       if (formData.panNumber && files.panCard) {
-        formDataToSend.append('panNumber', formData.panNumber);
-        formDataToSend.append('panCard', files.panCard);
-      }
-      if (formData.aadhaarNumber && files.aadhaarCard) {
-        formDataToSend.append('aadhaarNumber', formData.aadhaarNumber.replace(/\s/g, ''));
-        formDataToSend.append('aadhaarCard', files.aadhaarCard);
-      }
-      if (formData.dlNumber && files.drivingLicense) {
-        formDataToSend.append('dlNumber', formData.dlNumber);
-        formDataToSend.append('drivingLicense', files.drivingLicense);
-      }
-      if (formData.passportNumber && files.passport) {
-        formDataToSend.append('passportNumber', formData.passportNumber);
-        formDataToSend.append('passport', files.passport);
+        formDataToSend.append("panNumber", formData.panNumber);
+        formDataToSend.append("panCard", files.panCard);
       }
 
-      const response = await apiService.submitVerificationDocuments(formDataToSend);
-      
+      // Append Aadhaar
+      if (formData.aadhaarNumber && files.aadhaarCard) {
+        formDataToSend.append(
+          "aadhaarNumber",
+          formData.aadhaarNumber.replace(/\s/g, "")
+        );
+        formDataToSend.append("aadhaarCard", files.aadhaarCard);
+      }
+
+      // Append Driving License (optional)
+      if (formData.dlNumber && files.drivingLicense) {
+        formDataToSend.append("dlNumber", formData.dlNumber);
+        formDataToSend.append("drivingLicense", files.drivingLicense);
+      }
+
+      // Append Passport (optional)
+      if (formData.passportNumber && files.passport) {
+        formDataToSend.append("passportNumber", formData.passportNumber);
+        formDataToSend.append("passport", files.passport);
+      }
+
+      // Send data to API
+      const response = await apiService.submitVerificationDocuments(
+        formDataToSend
+      );
+
       if (response.success) {
-        setSuccess('Verification documents submitted successfully! Please wait for admin approval.');
-        
-        // Reset form
+        setSuccess(
+          "Verification documents submitted successfully! Please wait for admin approval."
+        );
+
+        // Reset form fields
         setFormData({
-          panNumber: '',
-          aadhaarNumber: '',
-          dlNumber: '',
-          passportNumber: ''
+          panNumber: "",
+          aadhaarNumber: "",
+          dlNumber: "",
+          passportNumber: "",
         });
+
         setFiles({
           panCard: null,
           aadhaarCard: null,
           drivingLicense: null,
-          passport: null
+          passport: null,
         });
 
-        // Reload page after 3 seconds
+        // Optionally reload page after delay
         setTimeout(() => {
           window.location.reload();
         }, 3000);
+      } else {
+        setError(response.message || "Failed to submit verification documents");
       }
-    } catch (error: any) {
-      setError(error.message || 'Failed to submit verification documents');
+    } catch (err: any) {
+      // Handle network or unexpected errors
+      setError(err.message || "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -162,41 +204,49 @@ const UserVerification: React.FC = () => {
 
   const getVerificationStatus = () => {
     if (!auth.user) return null;
-    
+
     switch (auth.user.verificationStatus) {
-      case 'PENDING':
+      case "PENDING":
         return (
           <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4 mb-6">
             <div className="flex items-center">
               <Clock className="h-5 w-5 text-yellow-500 mr-2" />
-              <span className="text-yellow-800 font-medium">Verification Pending</span>
+              <span className="text-yellow-800 font-medium">
+                Verification Pending
+              </span>
             </div>
             <p className="text-yellow-700 mt-1">
               Your documents are under review. You'll be notified once verified.
             </p>
           </div>
         );
-      case 'VERIFIED':
+      case "VERIFIED":
         return (
           <div className="bg-green-50 border border-green-200 rounded-md p-4 mb-6">
             <div className="flex items-center">
               <CheckCircle className="h-5 w-5 text-green-500 mr-2" />
-              <span className="text-green-800 font-medium">Account Verified</span>
+              <span className="text-green-800 font-medium">
+                Account Verified
+              </span>
             </div>
             <p className="text-green-700 mt-1">
-              Your account has been verified. You can now claim land ownership and participate in transactions.
+              Your account has been verified. You can now claim land ownership
+              and participate in transactions.
             </p>
           </div>
         );
-      case 'REJECTED':
+      case "REJECTED":
         return (
           <div className="bg-red-50 border border-red-200 rounded-md p-4 mb-6">
             <div className="flex items-center">
               <X className="h-5 w-5 text-red-500 mr-2" />
-              <span className="text-red-800 font-medium">Verification Rejected</span>
+              <span className="text-red-800 font-medium">
+                Verification Rejected
+              </span>
             </div>
             <p className="text-red-700 mt-1">
-              {auth.user.rejectionReason || 'Your verification was rejected. Please contact support or resubmit with correct documents.'}
+              {auth.user.rejectionReason ||
+                "Your verification was rejected. Please contact support or resubmit with correct documents."}
             </p>
           </div>
         );
@@ -206,36 +256,45 @@ const UserVerification: React.FC = () => {
   };
 
   // Don't show verification form for admins and auditors
-  if (['ADMIN', 'AUDITOR'].includes(auth.user?.role || '')) {
+  if (["ADMIN", "AUDITOR"].includes(auth.user?.role || "")) {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Account Verification</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Account Verification
+          </h1>
           <p className="mt-1 text-sm text-gray-500">
-            {auth.user?.role === 'ADMIN' ? 'Administrator' : 'Auditor'} account verification status
+            {auth.user?.role === "ADMIN" ? "Administrator" : "Auditor"} account
+            verification status
           </p>
         </div>
         <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
           <div className="flex items-center">
             <CheckCircle className="h-5 w-5 text-blue-500 mr-2" />
             <span className="text-blue-800 font-medium">
-              {auth.user?.role === 'ADMIN' ? 'Administrator' : 'Auditor'} Account
+              {auth.user?.role === "ADMIN" ? "Administrator" : "Auditor"}{" "}
+              Account
             </span>
           </div>
           <p className="text-blue-700 mt-1">
-            {auth.user?.role === 'ADMIN' ? 'Administrator' : 'Auditor'} accounts are automatically verified and do not require document submission.
+            {auth.user?.role === "ADMIN" ? "Administrator" : "Auditor"} accounts
+            are automatically verified and do not require document submission.
           </p>
         </div>
       </div>
     );
   }
 
-  if (auth.user?.verificationStatus === 'VERIFIED') {
+  if (auth.user?.verificationStatus === "VERIFIED") {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Account Verification</h1>
-          <p className="mt-1 text-sm text-gray-500">Your account verification status</p>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Account Verification
+          </h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Your account verification status
+          </p>
         </div>
         {getVerificationStatus()}
       </div>
@@ -245,7 +304,9 @@ const UserVerification: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Account Verification</h1>
+        <h1 className="text-2xl font-bold text-gray-900">
+          Account Verification
+        </h1>
         <p className="mt-1 text-sm text-gray-500">
           Submit your identity documents for verification to access all features
         </p>
@@ -271,11 +332,16 @@ const UserVerification: React.FC = () => {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="bg-white shadow-sm rounded-lg p-6 space-y-6">
+      <form
+        onSubmit={handleSubmit}
+        className="bg-white shadow-sm rounded-lg p-6 space-y-6"
+      >
         <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6">
           <div className="flex items-center">
             <FileText className="h-5 w-5 text-blue-500 mr-2" />
-            <span className="text-blue-800 font-medium">Document Requirements</span>
+            <span className="text-blue-800 font-medium">
+              Document Requirements
+            </span>
           </div>
           <ul className="text-blue-700 mt-2 text-sm space-y-1">
             <li>• Provide at least one identity document with its number</li>
@@ -315,14 +381,16 @@ const UserVerification: React.FC = () => {
                 <div className="flex items-center justify-between bg-gray-50 p-3 rounded-md">
                   <div className="flex items-center">
                     <FileText className="h-4 w-4 text-gray-500 mr-2" />
-                    <span className="text-sm text-gray-700">{files.panCard.name}</span>
+                    <span className="text-sm text-gray-700">
+                      {files.panCard.name}
+                    </span>
                     <span className="text-xs text-gray-500 ml-2">
                       ({(files.panCard.size / 1024 / 1024).toFixed(2)} MB)
                     </span>
                   </div>
                   <button
                     type="button"
-                    onClick={() => removeFile('panCard')}
+                    onClick={() => removeFile("panCard")}
                     className="text-red-500 hover:text-red-700"
                   >
                     <X className="h-4 w-4" />
@@ -333,14 +401,21 @@ const UserVerification: React.FC = () => {
                   <input
                     type="file"
                     accept=".jpg,.jpeg,.png,.pdf"
-                    onChange={(e) => handleFileChange(e, 'panCard')}
+                    onChange={(e) => handleFileChange(e, "panCard")}
                     className="hidden"
                     id="panCard"
                   />
-                  <label htmlFor="panCard" className="cursor-pointer flex flex-col items-center">
+                  <label
+                    htmlFor="panCard"
+                    className="cursor-pointer flex flex-col items-center"
+                  >
                     <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                    <span className="text-sm text-gray-600">Click to upload PAN Card</span>
-                    <span className="text-xs text-gray-500 mt-1">PDF, JPG, PNG (Max 5MB)</span>
+                    <span className="text-sm text-gray-600">
+                      Click to upload PAN Card
+                    </span>
+                    <span className="text-xs text-gray-500 mt-1">
+                      PDF, JPG, PNG (Max 5MB)
+                    </span>
                   </label>
                 </div>
               )}
@@ -366,7 +441,9 @@ const UserVerification: React.FC = () => {
                 placeholder="1234 5678 9012"
                 maxLength={14}
               />
-              <p className="text-xs text-gray-500 mt-1">12-digit Aadhaar number</p>
+              <p className="text-xs text-gray-500 mt-1">
+                12-digit Aadhaar number
+              </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -376,14 +453,16 @@ const UserVerification: React.FC = () => {
                 <div className="flex items-center justify-between bg-gray-50 p-3 rounded-md">
                   <div className="flex items-center">
                     <FileText className="h-4 w-4 text-gray-500 mr-2" />
-                    <span className="text-sm text-gray-700">{files.aadhaarCard.name}</span>
+                    <span className="text-sm text-gray-700">
+                      {files.aadhaarCard.name}
+                    </span>
                     <span className="text-xs text-gray-500 ml-2">
                       ({(files.aadhaarCard.size / 1024 / 1024).toFixed(2)} MB)
                     </span>
                   </div>
                   <button
                     type="button"
-                    onClick={() => removeFile('aadhaarCard')}
+                    onClick={() => removeFile("aadhaarCard")}
                     className="text-red-500 hover:text-red-700"
                   >
                     <X className="h-4 w-4" />
@@ -394,14 +473,21 @@ const UserVerification: React.FC = () => {
                   <input
                     type="file"
                     accept=".jpg,.jpeg,.png,.pdf"
-                    onChange={(e) => handleFileChange(e, 'aadhaarCard')}
+                    onChange={(e) => handleFileChange(e, "aadhaarCard")}
                     className="hidden"
                     id="aadhaarCard"
                   />
-                  <label htmlFor="aadhaarCard" className="cursor-pointer flex flex-col items-center">
+                  <label
+                    htmlFor="aadhaarCard"
+                    className="cursor-pointer flex flex-col items-center"
+                  >
                     <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                    <span className="text-sm text-gray-600">Click to upload Aadhaar Card</span>
-                    <span className="text-xs text-gray-500 mt-1">PDF, JPG, PNG (Max 5MB)</span>
+                    <span className="text-sm text-gray-600">
+                      Click to upload Aadhaar Card
+                    </span>
+                    <span className="text-xs text-gray-500 mt-1">
+                      PDF, JPG, PNG (Max 5MB)
+                    </span>
                   </label>
                 </div>
               )}
@@ -435,14 +521,17 @@ const UserVerification: React.FC = () => {
                 <div className="flex items-center justify-between bg-gray-50 p-3 rounded-md">
                   <div className="flex items-center">
                     <FileText className="h-4 w-4 text-gray-500 mr-2" />
-                    <span className="text-sm text-gray-700">{files.drivingLicense.name}</span>
+                    <span className="text-sm text-gray-700">
+                      {files.drivingLicense.name}
+                    </span>
                     <span className="text-xs text-gray-500 ml-2">
-                      ({(files.drivingLicense.size / 1024 / 1024).toFixed(2)} MB)
+                      ({(files.drivingLicense.size / 1024 / 1024).toFixed(2)}{" "}
+                      MB)
                     </span>
                   </div>
                   <button
                     type="button"
-                    onClick={() => removeFile('drivingLicense')}
+                    onClick={() => removeFile("drivingLicense")}
                     className="text-red-500 hover:text-red-700"
                   >
                     <X className="h-4 w-4" />
@@ -453,14 +542,21 @@ const UserVerification: React.FC = () => {
                   <input
                     type="file"
                     accept=".jpg,.jpeg,.png,.pdf"
-                    onChange={(e) => handleFileChange(e, 'drivingLicense')}
+                    onChange={(e) => handleFileChange(e, "drivingLicense")}
                     className="hidden"
                     id="drivingLicense"
                   />
-                  <label htmlFor="drivingLicense" className="cursor-pointer flex flex-col items-center">
+                  <label
+                    htmlFor="drivingLicense"
+                    className="cursor-pointer flex flex-col items-center"
+                  >
                     <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                    <span className="text-sm text-gray-600">Click to upload Driving License</span>
-                    <span className="text-xs text-gray-500 mt-1">PDF, JPG, PNG (Max 5MB)</span>
+                    <span className="text-sm text-gray-600">
+                      Click to upload Driving License
+                    </span>
+                    <span className="text-xs text-gray-500 mt-1">
+                      PDF, JPG, PNG (Max 5MB)
+                    </span>
                   </label>
                 </div>
               )}
@@ -494,14 +590,16 @@ const UserVerification: React.FC = () => {
                 <div className="flex items-center justify-between bg-gray-50 p-3 rounded-md">
                   <div className="flex items-center">
                     <FileText className="h-4 w-4 text-gray-500 mr-2" />
-                    <span className="text-sm text-gray-700">{files.passport.name}</span>
+                    <span className="text-sm text-gray-700">
+                      {files.passport.name}
+                    </span>
                     <span className="text-xs text-gray-500 ml-2">
                       ({(files.passport.size / 1024 / 1024).toFixed(2)} MB)
                     </span>
                   </div>
                   <button
                     type="button"
-                    onClick={() => removeFile('passport')}
+                    onClick={() => removeFile("passport")}
                     className="text-red-500 hover:text-red-700"
                   >
                     <X className="h-4 w-4" />
@@ -512,14 +610,21 @@ const UserVerification: React.FC = () => {
                   <input
                     type="file"
                     accept=".jpg,.jpeg,.png,.pdf"
-                    onChange={(e) => handleFileChange(e, 'passport')}
+                    onChange={(e) => handleFileChange(e, "passport")}
                     className="hidden"
                     id="passport"
                   />
-                  <label htmlFor="passport" className="cursor-pointer flex flex-col items-center">
+                  <label
+                    htmlFor="passport"
+                    className="cursor-pointer flex flex-col items-center"
+                  >
                     <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                    <span className="text-sm text-gray-600">Click to upload Passport</span>
-                    <span className="text-xs text-gray-500 mt-1">PDF, JPG, PNG (Max 5MB)</span>
+                    <span className="text-sm text-gray-600">
+                      Click to upload Passport
+                    </span>
+                    <span className="text-xs text-gray-500 mt-1">
+                      PDF, JPG, PNG (Max 5MB)
+                    </span>
                   </label>
                 </div>
               )}
@@ -533,8 +638,8 @@ const UserVerification: React.FC = () => {
             disabled={!canSubmit()}
             className={`px-6 py-3 rounded-md font-medium transition-all duration-200 ${
               canSubmit()
-                ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                ? "bg-blue-600 text-white hover:bg-blue-700 shadow-md hover:shadow-lg"
+                : "bg-gray-300 text-gray-500 cursor-not-allowed"
             }`}
           >
             {loading ? (
@@ -543,7 +648,7 @@ const UserVerification: React.FC = () => {
                 Submitting...
               </div>
             ) : (
-              'Submit for Verification'
+              "Submit for Verification"
             )}
           </button>
         </div>

@@ -28,7 +28,7 @@ class ApiService {
     }
   }
 
-  // Auth endpoints
+  // ==================== AUTH ====================
   async register(userData: any) {
     return this.request('/auth/register', {
       method: 'POST',
@@ -54,7 +54,7 @@ class ApiService {
     return this.request('/auth/me');
   }
 
-  // Property endpoints
+  // ==================== PROPERTIES ====================
   async getProperties(params: any = {}) {
     const queryString = new URLSearchParams(params).toString();
     return this.request(`/properties${queryString ? `?${queryString}` : ''}`);
@@ -93,7 +93,7 @@ class ApiService {
     return this.request('/properties/user/owned');
   }
 
-  // Transaction endpoints
+  // ==================== TRANSACTIONS ====================
   async initiateTransaction(transactionData: any) {
     return this.request('/transactions', {
       method: 'POST',
@@ -130,29 +130,23 @@ class ApiService {
     return this.request(`/transactions/verify/${certificateHash}`);
   }
 
-  // User verification endpoints
+  // ==================== USER VERIFICATION ====================
   async submitVerificationDocuments(formData: FormData) {
     const token = localStorage.getItem('token');
-    
-    try {
-      const response = await fetch(`${API_BASE_URL}/users/verification/submit`, {
-        method: 'POST',
-        headers: {
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-        body: formData,
-      });
+    const response = await fetch(`${API_BASE_URL}/users/verification/submit`, {
+      method: 'POST',
+      headers: {
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: formData,
+    });
 
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Document submission failed');
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('Document submission error:', error);
-      throw error;
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Document submission failed');
     }
+
+    return await response.json();
   }
 
   async getPendingVerifications() {
@@ -166,7 +160,7 @@ class ApiService {
     });
   }
 
-  // Land management endpoints
+  // ==================== LANDS ====================
   async addLand(landData: FormData) {
     const token = localStorage.getItem('token');
     const response = await fetch(`${API_BASE_URL}/lands/add`, {
@@ -185,74 +179,25 @@ class ApiService {
     return await response.json();
   }
 
-  async digitalizeLand(landId: string) {
-    return this.request(`/lands/${landId}/digitalize`, {
-      method: 'POST',
-    });
-  }
-
-  async verifyLandByAssetId(assetId: string) {
-    return this.request(`/lands/verify/${assetId}`);
-  }
-
-  async getNearbyLands(latitude: number, longitude: number, maxDistance?: number) {
-    const params = new URLSearchParams({
-      latitude: latitude.toString(),
-      longitude: longitude.toString(),
-      ...(maxDistance && { maxDistance: maxDistance.toString() })
-    });
-    return this.request(`/lands/nearby?${params}`);
-  }
-
-  // Two-factor authentication endpoints
-  async setupTwoFactor() {
-    return this.request('/auth/2fa/setup', {
-      method: 'POST',
-    });
-  }
-
-  async verifyTwoFactor(data: any) {
-    return this.request('/auth/2fa/verify', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  async disableTwoFactor(data: any) {
-    return this.request('/auth/2fa/disable', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    });
-  }
-
-  // Audit endpoints
-  async getAuditLogs(dateRange: any) {
-    const params = new URLSearchParams(dateRange);
-    return this.request(`/audit/logs?${params}`);
-  }
-
-  async getSystemStatistics(dateRange: any) {
-    const params = new URLSearchParams(dateRange);
-    return this.request(`/audit/statistics?${params}`);
-  }
-
-  async exportAuditReport(dateRange: any) {
-    const params = new URLSearchParams(dateRange);
-    const response = await fetch(`${API_BASE_URL}/audit/export?${params}`, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`,
-      },
-    });
-    
-    if (!response.ok) {
-      throw new Error('Failed to export audit report');
-    }
-    
-    return response;
-  }
   async getLands(params: any = {}) {
     const queryString = new URLSearchParams(params).toString();
     return this.request(`/lands${queryString ? `?${queryString}` : ''}`);
+  }
+
+  async getMyLands() {
+    return this.request('/lands/my-lands');
+  }
+
+  async getLandsForSale(params: any = {}) {
+    const queryString = new URLSearchParams(params).toString();
+    return this.request(`/lands/for-sale${queryString ? `?${queryString}` : ''}`);
+  }
+
+  async digitalizeLand(landId: string) {
+    if (!landId) throw new Error("❌ No landId provided to digitalize");
+    return this.request(`/lands/${landId}/digitalize`, {
+      method: 'POST',
+    });
   }
 
   async searchLand(assetId: string) {
@@ -265,12 +210,6 @@ class ApiService {
     });
   }
 
-  async digitalizeLand(landId: string) {
-    return this.request(`/lands/${landId}/digitalize`, {
-      method: 'POST',
-    });
-  }
-
   async listLandForSale(landId: string, saleData: any) {
     return this.request(`/lands/${landId}/list-for-sale`, {
       method: 'POST',
@@ -278,16 +217,20 @@ class ApiService {
     });
   }
 
-  async getMyLands() {
-    return this.request('/lands/my-lands');
+  async verifyLandByAssetId(assetId: string) {
+    return this.request(`/lands/verify/${assetId}`);
   }
 
-  async getLandsForSale(params: any = {}) {
-    const queryString = new URLSearchParams(params).toString();
-    return this.request(`/lands/for-sale${queryString ? `?${queryString}` : ''}`);
+  async getNearbyLands(latitude: number, longitude: number, maxDistance?: number) {
+    const params = new URLSearchParams({
+      latitude: latitude.toString(),
+      longitude: longitude.toString(),
+      ...(maxDistance && { maxDistance: maxDistance.toString() }),
+    });
+    return this.request(`/lands/nearby?${params}`);
   }
 
-  // Chat endpoints
+  // ==================== CHAT ====================
   async startChat(landId: string) {
     return this.request('/chat/start', {
       method: 'POST',
@@ -330,18 +273,18 @@ class ApiService {
     });
   }
 
-  // Land transaction endpoints
+  // ==================== LAND TRANSACTIONS ====================
   async initiateLandTransaction(chatId: string) {
     return this.request('/land-transactions/purchase', {
       method: 'POST',
-      body: JSON.stringify({ chatId })
+      body: JSON.stringify({ chatId }),
     });
   }
 
   async purchaseLand(landId: string, offerPrice: number) {
     return this.request(`/lands/${landId}/purchase`, {
       method: 'POST',
-      body: JSON.stringify({ offerPrice })
+      body: JSON.stringify({ offerPrice }),
     });
   }
 
@@ -384,6 +327,49 @@ class ApiService {
 
   async verifyOwnership(transactionId: string) {
     return this.request(`/land-transactions/verify/${transactionId}`);
+  }
+
+  // ==================== 2FA ====================
+  async setupTwoFactor() {
+    return this.request('/auth/2fa/setup', { method: 'POST' });
+  }
+
+  async verifyTwoFactor(data: any) {
+    return this.request('/auth/2fa/verify', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async disableTwoFactor(data: any) {
+    return this.request('/auth/2fa/disable', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // ==================== AUDIT ====================
+  async getAuditLogs(dateRange: any) {
+    const params = new URLSearchParams(dateRange);
+    return this.request(`/audit/logs?${params}`);
+  }
+
+  async getSystemStatistics(dateRange: any) {
+    const params = new URLSearchParams(dateRange);
+    return this.request(`/audit/statistics?${params}`);
+  }
+
+  async exportAuditReport(dateRange: any) {
+    const params = new URLSearchParams(dateRange);
+    const response = await fetch(`${API_BASE_URL}/audit/export?${params}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to export audit report');
+    }
+
+    return response;
   }
 }
 
