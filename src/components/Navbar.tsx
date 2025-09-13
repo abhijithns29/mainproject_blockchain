@@ -1,5 +1,5 @@
 import React from 'react';
-import { LogOut, User, Home, FileText, Settings, Shield, Database, ShoppingCart, MessageCircle, AlertCircle } from 'lucide-react';
+import { LogOut, User, Home, FileText, Settings, Shield, Database, ShoppingCart, MessageCircle, AlertCircle, QrCode, Map, BarChart3, Key } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
 
 interface NavbarProps {
@@ -15,12 +15,18 @@ const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab }) => {
     { id: 'marketplace', label: 'Marketplace', icon: ShoppingCart },
     { id: 'chats', label: 'Chats', icon: MessageCircle },
     { id: 'transactions', label: 'Transactions', icon: FileText },
+    { id: 'qr-verify', label: 'QR Verify', icon: QrCode },
     { id: 'verification', label: 'Verification', icon: Shield },
+    { id: 'two-factor', label: '2FA', icon: Key },
     { id: 'profile', label: 'Profile', icon: User },
   ];
 
   if (auth.user?.role === 'ADMIN') {
     menuItems.push({ id: 'admin', label: 'Admin Panel', icon: Settings });
+  }
+  
+  if (auth.user?.role === 'AUDITOR') {
+    menuItems.push({ id: 'auditor', label: 'Audit Dashboard', icon: BarChart3 });
   }
 
   const handleTabClick = (tabId: string) => {

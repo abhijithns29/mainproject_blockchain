@@ -3,20 +3,32 @@ const multer = require('multer');
 const QRCode = require('qrcode');
 const Land = require('../models/Land');
 const User = require('../models/User');
-const LandTransaction = require('../models/LandTransaction');
+const AuditLog = require('../models/AuditLog');
 const { auth, adminAuth } = require('../middleware/auth');
 const ipfsService = require('../config/ipfs');
 const PDFGenerator = require('../utils/pdfGenerator');
+const DocumentWatermark = require('../utils/documentWatermark');
 
 const router = express.Router();
-const upload = multer({ storage: multer.memoryStorage() });
+const upload = multer({ 
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only PDF, JPG, and PNG files are allowed.'));
+    }
+  }
+});
 
 // Add land to database (Admin only)
-router.post('/add', adminAuth, upload.array('documents'), async (req, res) => {
+router.post('/add', adminAuth, upload.array('documents', 10), async (req, res) => {
   try {
-    console.log('Adding land to database...');
+    console.log('=== ADDING LAND TO DATABASE ===');
     console.log('Request body:', req.body);
-    console.log('Files:', req.files?.length || 0);
+    console.log('Files received:', req.files?.length || 0);
 
     const {
       surveyNumber,
@@ -30,59 +42,95 @@ router.post('/add', adminAuth, upload.array('documents'), async (req, res) => {
       boundaries,
       landType,
       classification,
-      ownerName
+      ownerName,
+      coordinates,
+      soilType,
+      waterSource,
+      roadAccess,
+      electricityConnection
     } = req.body;
 
     // Validate required fields
-    if (!surveyNumber || !village || !taluka || !district || !state || !pincode || !landType) {
+    const requiredFields = { surveyNumber, village, taluka, district, state, pincode, landType };
+    const missingFields = Object.entries(requiredFields)
+      .filter(([key, value]) => !value || value.trim() === '')
+      .map(([key]) => key);
+
+    if (missingFields.length > 0) {
       return res.status(400).json({ 
-        message: 'Missing required fields: surveyNumber, village, taluka, district, state, pincode, landType' 
+        message: `Missing required fields: ${missingFields.join(', ')}`,
+        missingFields
       });
     }
 
-    // Parse JSON strings if they exist
+    // Parse JSON strings safely
     let parsedArea = {};
     let parsedBoundaries = {};
+    let parsedCoordinates = null;
 
     try {
-      parsedArea = typeof area === 'string' ? JSON.parse(area) : area || {};
-      parsedBoundaries = typeof boundaries === 'string' ? JSON.parse(boundaries) : boundaries || {};
+      parsedArea = area ? (typeof area === 'string' ? JSON.parse(area) : area) : {};
+      parsedBoundaries = boundaries ? (typeof boundaries === 'string' ? JSON.parse(boundaries) : boundaries) : {};
+      parsedCoordinates = coordinates ? (typeof coordinates === 'string' ? JSON.parse(coordinates) : coordinates) : null;
     } catch (parseError) {
       console.error('JSON parse error:', parseError);
-      parsedArea = {};
-      parsedBoundaries = {};
+      return res.status(400).json({ 
+        message: 'Invalid JSON format in area, boundaries, or coordinates fields' 
+      });
     }
 
-    // Upload documents to IPFS
-    const documents = [];
+    // Upload documents to IPFS with watermarks
+    const originalDocuments = [];
     if (req.files && req.files.length > 0) {
-      console.log('Uploading documents to IPFS...');
+      console.log('Processing and uploading documents...');
+      
       for (const file of req.files) {
         try {
-          const ipfsHash = await ipfsService.uploadFile(file.buffer, file.originalname);
-          documents.push({
+          // Generate watermark
+          const watermarkText = DocumentWatermark.generateWatermarkText(
+            'PENDING', // Asset ID will be generated
+            ownerName || 'Unknown'
+          );
+          
+          let processedBuffer;
+          if (file.mimetype === 'application/pdf') {
+            processedBuffer = await DocumentWatermark.addWatermarkToPDF(file.buffer, watermarkText);
+          } else {
+            processedBuffer = await DocumentWatermark.addWatermarkToImage(file.buffer, watermarkText);
+          }
+          
+          const ipfsHash = await ipfsService.uploadFile(processedBuffer, file.originalname);
+          
+          originalDocuments.push({
             type: 'OTHER',
             documentNumber: `DOC-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
             date: new Date(),
+            registrationOffice: `${district} Sub-Registrar Office`,
             documentUrl: ipfsService.getFileUrl(ipfsHash),
-            ipfsHash
+            ipfsHash,
+            watermark: watermarkText,
+            uploadedBy: req.user._id
           });
-          console.log('Document uploaded:', file.originalname);
+          
+          console.log(`Document processed and uploaded: ${file.originalname}`);
         } catch (uploadError) {
-          console.error('File upload error:', uploadError);
+          console.error('Document upload error:', uploadError);
+          return res.status(500).json({ 
+            message: `Failed to upload document: ${file.originalname}` 
+          });
         }
       }
     }
 
     // Create land record
     const landData = {
-      surveyNumber,
-      subDivision: subDivision || '',
-      village,
-      taluka,
-      district,
-      state,
-      pincode,
+      surveyNumber: surveyNumber.trim(),
+      subDivision: subDivision?.trim() || '',
+      village: village.trim(),
+      taluka: taluka.trim(),
+      district: district.trim(),
+      state: state.trim(),
+      pincode: pincode.trim(),
       area: {
         acres: parseFloat(parsedArea.acres) || 0,
         guntas: parseFloat(parsedArea.guntas) || 0,
@@ -94,26 +142,52 @@ router.post('/add', adminAuth, upload.array('documents'), async (req, res) => {
         east: parsedBoundaries.east || '',
         west: parsedBoundaries.west || ''
       },
+      coordinates: parsedCoordinates ? {
+        latitude: parseFloat(parsedCoordinates.latitude),
+        longitude: parseFloat(parsedCoordinates.longitude)
+      } : undefined,
       landType,
       classification: classification || undefined,
-      originalDocuments: documents,
+      originalDocuments,
       ownershipHistory: ownerName ? [{
-        ownerName,
+        ownerName: ownerName.trim(),
         fromDate: new Date(),
-        documentReference: 'INITIAL_RECORD'
+        documentReference: 'INITIAL_RECORD',
+        transactionType: 'INITIAL'
       }] : [],
       addedBy: req.user._id,
-      verificationStatus: 'PENDING'
+      verificationStatus: 'PENDING',
+      metadata: {
+        soilType: soilType || '',
+        waterSource: waterSource || '',
+        roadAccess: roadAccess === 'true' || roadAccess === true,
+        electricityConnection: electricityConnection === 'true' || electricityConnection === true
+      }
     };
 
-    console.log('Creating land with data:', landData);
-
+    console.log('Creating land with processed data...');
     const land = new Land(landData);
     await land.save();
 
-    console.log('Land saved successfully:', land.assetId);
+    // Log audit trail
+    await AuditLog.logAction(
+      'LAND_ADD',
+      req.user._id,
+      'LAND',
+      land._id.toString(),
+      {
+        assetId: land.assetId,
+        village: land.village,
+        district: land.district,
+        documentsUploaded: originalDocuments.length
+      },
+      req
+    );
+
+    console.log(`✅ Land successfully added with Asset ID: ${land.assetId}`);
 
     res.status(201).json({
+      success: true,
       message: 'Land added to database successfully',
       land: {
         id: land._id,
@@ -122,19 +196,145 @@ router.post('/add', adminAuth, upload.array('documents'), async (req, res) => {
         village: land.village,
         district: land.district,
         state: land.state,
-        landType: land.landType
+        landType: land.landType,
+        documentsUploaded: originalDocuments.length
       }
     });
   } catch (error) {
-    console.error('Add land error:', error);
+    console.error('❌ Add land error:', error);
+    
+    // Log failed attempt
+    try {
+      await AuditLog.logAction(
+        'LAND_ADD',
+        req.user._id,
+        'LAND',
+        'FAILED',
+        { error: error.message },
+        req
+      );
+    } catch (auditError) {
+      console.error('Audit log error:', auditError);
+    }
+    
     res.status(500).json({ 
+      success: false,
       message: 'Failed to add land to database',
-      error: error.message 
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
     });
   }
 });
 
-// Get all lands (with filters)
+// Digitalize land document (Admin only)
+router.post('/:landId/digitalize', adminAuth, async (req, res) => {
+  try {
+    console.log('=== DIGITALIZING LAND DOCUMENT ===');
+    console.log('Land ID:', req.params.landId);
+    
+    const land = await Land.findById(req.params.landId)
+      .populate('currentOwner', 'fullName email');
+
+    if (!land) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Land not found' 
+      });
+    }
+
+    if (land.digitalDocument.isDigitalized) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Land is already digitalized' 
+      });
+    }
+
+    // Generate QR code with verification data
+    const qrData = {
+      assetId: land.assetId,
+      owner: land.currentOwner?.fullName || 'Unassigned',
+      verifyUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-land/${land.assetId}`,
+      digitalizedDate: new Date().toISOString(),
+      digitalizedBy: req.user.fullName
+    };
+    
+    const qrCodeDataURL = await QRCode.toDataURL(JSON.stringify(qrData), {
+      width: 200,
+      margin: 2,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF'
+      }
+    });
+
+    // Generate watermark
+    const watermarkText = DocumentWatermark.generateWatermarkText(
+      land.assetId,
+      land.currentOwner?.fullName || 'Government Land'
+    );
+
+    // Generate digital ownership certificate
+    const certificatePDF = await PDFGenerator.generateLandCertificate(land, qrCodeDataURL);
+    const watermarkedPDF = await DocumentWatermark.addWatermarkToPDF(certificatePDF, watermarkText);
+    
+    const certificateHash = await ipfsService.uploadFile(
+      watermarkedPDF,
+      `land-certificate-${land.assetId}.pdf`
+    );
+
+    // Update land with digital document info
+    land.digitalDocument = {
+      qrCode: qrCodeDataURL,
+      certificateUrl: ipfsService.getFileUrl(certificateHash),
+      ipfsHash: certificateHash,
+      generatedDate: new Date(),
+      isDigitalized: true,
+      watermark: watermarkText,
+      digitalizedBy: req.user._id
+    };
+    
+    land.verificationStatus = 'VERIFIED';
+    land.verifiedBy = req.user._id;
+
+    await land.save();
+
+    // Log audit trail
+    await AuditLog.logAction(
+      'LAND_DIGITALIZE',
+      req.user._id,
+      'LAND',
+      land._id.toString(),
+      {
+        assetId: land.assetId,
+        certificateGenerated: true,
+        qrCodeGenerated: true
+      },
+      req
+    );
+
+    console.log(`✅ Land digitalized successfully: ${land.assetId}`);
+
+    res.json({
+      success: true,
+      message: 'Land digitalized successfully',
+      digitalDocument: {
+        certificateUrl: land.digitalDocument.certificateUrl,
+        qrCode: land.digitalDocument.qrCode,
+        isDigitalized: true,
+        generatedDate: land.digitalDocument.generatedDate
+      }
+    });
+  } catch (error) {
+    console.error('❌ Digitalization error:', error);
+    
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to digitalize land document',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Internal server error'
+    });
+  }
+});
+
+// Get all lands with advanced filtering
 router.get('/', async (req, res) => {
   try {
     const { 
@@ -146,9 +346,16 @@ router.get('/', async (req, res) => {
       isForSale, 
       assetId,
       village,
-      verificationStatus
+      verificationStatus,
+      minPrice,
+      maxPrice,
+      minArea,
+      maxArea,
+      sortBy = 'createdAt',
+      sortOrder = 'desc'
     } = req.query;
 
+    // Build query
     const query = {};
     if (district) query.district = new RegExp(district, 'i');
     if (state) query.state = new RegExp(state, 'i');
@@ -157,25 +364,62 @@ router.get('/', async (req, res) => {
     if (isForSale === 'true') query['marketInfo.isForSale'] = true;
     if (assetId) query.assetId = new RegExp(assetId, 'i');
     if (verificationStatus) query.verificationStatus = verificationStatus;
+    
+    // Price filters
+    if (minPrice || maxPrice) {
+      query['marketInfo.askingPrice'] = {};
+      if (minPrice) query['marketInfo.askingPrice'].$gte = parseFloat(minPrice);
+      if (maxPrice) query['marketInfo.askingPrice'].$lte = parseFloat(maxPrice);
+    }
+    
+    // Area filters (convert to sqft for comparison)
+    if (minArea || maxArea) {
+      // This would require a more complex aggregation pipeline
+      // For now, we'll filter by acres
+      if (minArea) query['area.acres'] = { $gte: parseFloat(minArea) };
+      if (maxArea) {
+        query['area.acres'] = { ...query['area.acres'], $lte: parseFloat(maxArea) };
+      }
+    }
+
+    // Build sort object
+    const sortObj = {};
+    sortObj[sortBy] = sortOrder === 'desc' ? -1 : 1;
 
     const lands = await Land.find(query)
       .populate('currentOwner', 'fullName email')
       .populate('addedBy', 'fullName')
+      .populate('verifiedBy', 'fullName')
       .limit(limit * 1)
       .skip((page - 1) * limit)
-      .sort({ createdAt: -1 });
+      .sort(sortObj);
 
     const total = await Land.countDocuments(query);
 
     res.json({
+      success: true,
       lands,
-      totalPages: Math.ceil(total / limit),
-      currentPage: parseInt(page),
-      total
+      pagination: {
+        totalPages: Math.ceil(total / limit),
+        currentPage: parseInt(page),
+        total,
+        hasNext: page < Math.ceil(total / limit),
+        hasPrev: page > 1
+      },
+      filters: {
+        district,
+        state,
+        landType,
+        isForSale,
+        verificationStatus
+      }
     });
   } catch (error) {
     console.error('Get lands error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to fetch lands' 
+    });
   }
 });
 
@@ -183,21 +427,37 @@ router.get('/', async (req, res) => {
 router.get('/search/:assetId', async (req, res) => {
   try {
     const { assetId } = req.params;
-    const land = await Land.findOne({ 
-      assetId: new RegExp(`^${assetId}$`, 'i') 
-    })
-      .populate('currentOwner', 'fullName email walletAddress')
-      .populate('addedBy', 'fullName')
-      .populate('verifiedBy', 'fullName');
-
-    if (!land) {
-      return res.status(404).json({ message: 'Land not found with this Asset ID' });
+    
+    if (!assetId || assetId.trim() === '') {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Asset ID is required' 
+      });
     }
 
-    res.json({ land });
+    const land = await Land.findByAssetId(assetId.trim())
+      .populate('currentOwner', 'fullName email walletAddress')
+      .populate('addedBy', 'fullName')
+      .populate('verifiedBy', 'fullName')
+      .populate('ownershipHistory.owner', 'fullName');
+
+    if (!land) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Land not found with this Asset ID' 
+      });
+    }
+
+    res.json({ 
+      success: true,
+      land 
+    });
   } catch (error) {
     console.error('Search land error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Search failed' 
+    });
   }
 });
 
@@ -205,104 +465,71 @@ router.get('/search/:assetId', async (req, res) => {
 router.post('/:landId/claim', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user._id);
-    if (user.verificationStatus !== 'VERIFIED') {
+    
+    if (!user.canClaimLand()) {
       return res.status(403).json({ 
+        success: false,
         message: 'User must be verified to claim land ownership. Please complete your verification first.' 
       });
     }
 
     const land = await Land.findById(req.params.landId);
     if (!land) {
-      return res.status(404).json({ message: 'Land not found' });
+      return res.status(404).json({ 
+        success: false,
+        message: 'Land not found' 
+      });
     }
 
     if (land.currentOwner) {
-      return res.status(400).json({ message: 'Land already has an owner' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'Land already has an owner' 
+      });
+    }
+
+    if (land.verificationStatus !== 'VERIFIED') {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Land must be verified before claiming ownership' 
+      });
     }
 
     // Update land ownership
-    land.currentOwner = req.user._id;
-    land.ownershipHistory.push({
-      owner: req.user._id,
-      fromDate: new Date(),
-      documentReference: 'DIGITAL_CLAIM'
-    });
-    land.status = 'AVAILABLE';
+    land.addOwnershipRecord(req.user._id, 'INITIAL', 'DIGITAL_CLAIM');
     await land.save();
 
     // Add to user's owned lands
     user.ownedLands.push(land._id);
     await user.save();
 
+    // Log audit trail
+    await AuditLog.logAction(
+      'LAND_CLAIM',
+      req.user._id,
+      'LAND',
+      land._id.toString(),
+      {
+        assetId: land.assetId,
+        claimedBy: user.fullName
+      },
+      req
+    );
+
     await land.populate('currentOwner', 'fullName email');
 
+    console.log(`✅ Land ${land.assetId} claimed by user ${user.email}`);
+
     res.json({
+      success: true,
       message: 'Land ownership claimed successfully',
       land
     });
   } catch (error) {
     console.error('Claim ownership error:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Generate digital document (Admin only)
-router.post('/:landId/digitalize', adminAuth, async (req, res) => {
-  try {
-    console.log('Digitalizing land:', req.params.landId);
-    
-    const land = await Land.findById(req.params.landId)
-      .populate('currentOwner', 'fullName email');
-
-    if (!land) {
-      return res.status(404).json({ message: 'Land not found' });
-    }
-
-    if (land.digitalDocument.isDigitalized) {
-      return res.status(400).json({ message: 'Land is already digitalized' });
-    }
-
-    // Generate QR code
-    const qrData = {
-      assetId: land.assetId,
-      owner: land.currentOwner?.fullName || 'Unassigned',
-      verifyUrl: `${process.env.FRONTEND_URL || 'http://localhost:5173'}/verify-land/${land.assetId}`,
-      digitalizedDate: new Date().toISOString()
-    };
-    
-    const qrCodeDataURL = await QRCode.toDataURL(JSON.stringify(qrData));
-
-    // Generate digital ownership certificate
-    const certificatePDF = await PDFGenerator.generateLandCertificate(land, qrCodeDataURL);
-    const certificateHash = await ipfsService.uploadFile(
-      Buffer.from(certificatePDF),
-      `land-certificate-${land.assetId}.pdf`
-    );
-
-    // Update land with digital document info
-    land.digitalDocument = {
-      qrCode: qrCodeDataURL,
-      certificateUrl: ipfsService.getFileUrl(certificateHash),
-      ipfsHash: certificateHash,
-      generatedDate: new Date(),
-      isDigitalized: true
-    };
-    land.verificationStatus = 'VERIFIED';
-    land.verifiedBy = req.user._id;
-
-    await land.save();
-
-    console.log('Land digitalized successfully:', land.assetId);
-
-    res.json({
-      message: 'Land digitalized successfully',
-      digitalDocument: land.digitalDocument
-    });
-  } catch (error) {
-    console.error('Digitalization error:', error);
     res.status(500).json({ 
-      message: 'Failed to digitalize land document',
-      error: error.message 
+      success: false,
+      message: 'Failed to claim ownership' 
     });
   }
 });
@@ -310,27 +537,42 @@ router.post('/:landId/digitalize', adminAuth, async (req, res) => {
 // List land for sale (Owner only)
 router.post('/:landId/list-for-sale', auth, async (req, res) => {
   try {
-    const { askingPrice, description } = req.body;
-    const land = await Land.findById(req.params.landId);
-
-    if (!land) {
-      return res.status(404).json({ message: 'Land not found' });
-    }
-
-    if (!land.currentOwner || land.currentOwner.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Only the owner can list this land for sale' });
-    }
-
-    if (!land.digitalDocument.isDigitalized) {
+    const { askingPrice, description, features, nearbyAmenities } = req.body;
+    
+    if (!askingPrice || askingPrice <= 0) {
       return res.status(400).json({ 
-        message: 'Land must be digitalized before listing for sale. Please contact admin.' 
+        success: false,
+        message: 'Valid asking price is required' 
       });
     }
 
-    // Calculate price per sqft if area is available
+    const land = await Land.findById(req.params.landId);
+    if (!land) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Land not found' 
+      });
+    }
+
+    if (!land.currentOwner || land.currentOwner.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ 
+        success: false,
+        message: 'Only the owner can list this land for sale' 
+      });
+    }
+
+    if (!land.canBeListedForSale()) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Land must be digitalized and verified before listing for sale' 
+      });
+    }
+
+    // Calculate price per sqft
+    const totalAreaSqft = land.getTotalAreaSqft();
     let pricePerSqft = 0;
-    if (land.area.sqft > 0) {
-      pricePerSqft = parseFloat(askingPrice) / land.area.sqft;
+    if (totalAreaSqft > 0) {
+      pricePerSqft = parseFloat(askingPrice) / totalAreaSqft;
     }
 
     land.marketInfo = {
@@ -339,124 +581,210 @@ router.post('/:landId/list-for-sale', auth, async (req, res) => {
       pricePerSqft,
       listedDate: new Date(),
       description: description || '',
-      images: []
+      features: features || [],
+      nearbyAmenities: nearbyAmenities || []
     };
-    land.status = 'FOR_SALE';
 
     await land.save();
 
+    // Log audit trail
+    await AuditLog.logAction(
+      'LAND_LIST_SALE',
+      req.user._id,
+      'LAND',
+      land._id.toString(),
+      {
+        assetId: land.assetId,
+        askingPrice: parseFloat(askingPrice)
+      },
+      req
+    );
+
+    console.log(`✅ Land ${land.assetId} listed for sale`);
+
     res.json({
+      success: true,
       message: 'Land listed for sale successfully',
       land
     });
   } catch (error) {
     console.error('List for sale error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to list land for sale' 
+    });
   }
 });
 
 // Get user's owned lands
 router.get('/my-lands', auth, async (req, res) => {
   try {
-    const lands = await Land.find({ currentOwner: req.user._id })
+    const lands = await Land.findByOwner(req.user._id)
       .sort({ createdAt: -1 });
 
-    res.json({ lands });
+    res.json({ 
+      success: true,
+      lands 
+    });
   } catch (error) {
     console.error('Get user lands error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to fetch your lands' 
+    });
   }
 });
 
-// Get lands for sale
+// Get lands for sale with advanced filters
 router.get('/for-sale', async (req, res) => {
   try {
-    const { page = 1, limit = 20, minPrice, maxPrice, district, state } = req.query;
+    const { 
+      page = 1, 
+      limit = 20, 
+      minPrice, 
+      maxPrice, 
+      district, 
+      state, 
+      landType,
+      minArea,
+      maxArea,
+      sortBy = 'listedDate',
+      sortOrder = 'desc'
+    } = req.query;
     
-    const query = { 
-      'marketInfo.isForSale': true,
-      status: 'FOR_SALE',
-      'digitalDocument.isDigitalized': true
-    };
-    
-    if (minPrice) query['marketInfo.askingPrice'] = { $gte: parseFloat(minPrice) };
-    if (maxPrice) {
-      query['marketInfo.askingPrice'] = { 
-        ...query['marketInfo.askingPrice'], 
-        $lte: parseFloat(maxPrice) 
-      };
-    }
-    if (district) query.district = new RegExp(district, 'i');
-    if (state) query.state = new RegExp(state, 'i');
+    const filters = {};
+    if (minPrice) filters.minPrice = parseFloat(minPrice);
+    if (maxPrice) filters.maxPrice = parseFloat(maxPrice);
+    if (district) filters.district = district;
+    if (state) filters.state = state;
+    if (landType) filters.landType = landType;
 
-    const lands = await Land.find(query)
+    let query = Land.findForSale(filters)
       .populate('currentOwner', 'fullName email')
       .limit(limit * 1)
-      .skip((page - 1) * limit)
-      .sort({ 'marketInfo.listedDate': -1 });
+      .skip((page - 1) * limit);
 
-    const total = await Land.countDocuments(query);
+    // Apply sorting
+    const sortObj = {};
+    if (sortBy === 'price') {
+      sortObj['marketInfo.askingPrice'] = sortOrder === 'desc' ? -1 : 1;
+    } else if (sortBy === 'area') {
+      sortObj['area.acres'] = sortOrder === 'desc' ? -1 : 1;
+    } else {
+      sortObj['marketInfo.listedDate'] = sortOrder === 'desc' ? -1 : 1;
+    }
+    
+    query = query.sort(sortObj);
+    const lands = await query;
+
+    const total = await Land.countDocuments({
+      'marketInfo.isForSale': true,
+      status: 'FOR_SALE',
+      'digitalDocument.isDigitalized': true,
+      ...filters
+    });
 
     res.json({
+      success: true,
       lands,
-      totalPages: Math.ceil(total / limit),
-      currentPage: parseInt(page),
-      total
+      pagination: {
+        totalPages: Math.ceil(total / limit),
+        currentPage: parseInt(page),
+        total,
+        hasNext: page < Math.ceil(total / limit),
+        hasPrev: page > 1
+      }
     });
   } catch (error) {
     console.error('Get lands for sale error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to fetch lands for sale' 
+    });
   }
 });
 
-// Initiate land purchase (Buyer)
-router.post('/:landId/purchase', auth, async (req, res) => {
+// Get nearby lands (geo-location based)
+router.get('/nearby', async (req, res) => {
   try {
-    const { offerPrice } = req.body;
-    const land = await Land.findById(req.params.landId).populate('currentOwner');
-
-    if (!land) {
-      return res.status(404).json({ message: 'Land not found' });
-    }
-
-    if (!land.marketInfo.isForSale) {
-      return res.status(400).json({ message: 'Land is not for sale' });
-    }
-
-    if (land.currentOwner._id.toString() === req.user._id.toString()) {
-      return res.status(400).json({ message: 'You cannot buy your own land' });
-    }
-
-    const buyer = await User.findById(req.user._id);
-    if (buyer.verificationStatus !== 'VERIFIED') {
-      return res.status(403).json({ 
-        message: 'You must be verified to purchase land' 
+    const { latitude, longitude, maxDistance = 10000 } = req.query;
+    
+    if (!latitude || !longitude) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Latitude and longitude are required' 
       });
     }
 
-    // Create transaction
-    const transaction = new LandTransaction({
-      landId: land._id,
-      seller: land.currentOwner._id,
-      buyer: req.user._id,
-      agreedPrice: parseFloat(offerPrice),
-      transactionType: 'SALE',
-      status: 'INITIATED'
-    });
-
-    await transaction.save();
-
-    // Update land status
-    land.status = 'UNDER_TRANSACTION';
-    await land.save();
+    const lands = await Land.findNearby(
+      parseFloat(latitude), 
+      parseFloat(longitude), 
+      parseInt(maxDistance)
+    ).populate('currentOwner', 'fullName email');
 
     res.json({
-      message: 'Purchase request initiated successfully',
-      transactionId: transaction._id
+      success: true,
+      lands,
+      searchCenter: { latitude: parseFloat(latitude), longitude: parseFloat(longitude) },
+      maxDistance: parseInt(maxDistance)
     });
   } catch (error) {
-    console.error('Purchase initiation error:', error);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Get nearby lands error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to fetch nearby lands' 
+    });
+  }
+});
+
+// Verify land by QR code
+router.get('/verify/:assetId', async (req, res) => {
+  try {
+    const { assetId } = req.params;
+    
+    const land = await Land.findByAssetId(assetId)
+      .populate('currentOwner', 'fullName email')
+      .populate('verifiedBy', 'fullName')
+      .populate('ownershipHistory.owner', 'fullName');
+
+    if (!land) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Land not found' 
+      });
+    }
+
+    if (!land.digitalDocument.isDigitalized) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Land is not digitalized' 
+      });
+    }
+
+    res.json({
+      success: true,
+      verification: {
+        isValid: true,
+        assetId: land.assetId,
+        currentOwner: land.currentOwner,
+        verificationStatus: land.verificationStatus,
+        digitalizedDate: land.digitalDocument.generatedDate,
+        ownershipHistory: land.ownershipHistory,
+        landDetails: {
+          village: land.village,
+          district: land.district,
+          state: land.state,
+          area: land.area,
+          landType: land.landType
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Verify land error:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Verification failed' 
+    });
   }
 });
 

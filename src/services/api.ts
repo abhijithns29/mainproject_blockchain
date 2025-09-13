@@ -185,6 +185,71 @@ class ApiService {
     return await response.json();
   }
 
+  async digitalizeLand(landId: string) {
+    return this.request(`/lands/${landId}/digitalize`, {
+      method: 'POST',
+    });
+  }
+
+  async verifyLandByAssetId(assetId: string) {
+    return this.request(`/lands/verify/${assetId}`);
+  }
+
+  async getNearbyLands(latitude: number, longitude: number, maxDistance?: number) {
+    const params = new URLSearchParams({
+      latitude: latitude.toString(),
+      longitude: longitude.toString(),
+      ...(maxDistance && { maxDistance: maxDistance.toString() })
+    });
+    return this.request(`/lands/nearby?${params}`);
+  }
+
+  // Two-factor authentication endpoints
+  async setupTwoFactor() {
+    return this.request('/auth/2fa/setup', {
+      method: 'POST',
+    });
+  }
+
+  async verifyTwoFactor(data: any) {
+    return this.request('/auth/2fa/verify', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async disableTwoFactor(data: any) {
+    return this.request('/auth/2fa/disable', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  // Audit endpoints
+  async getAuditLogs(dateRange: any) {
+    const params = new URLSearchParams(dateRange);
+    return this.request(`/audit/logs?${params}`);
+  }
+
+  async getSystemStatistics(dateRange: any) {
+    const params = new URLSearchParams(dateRange);
+    return this.request(`/audit/statistics?${params}`);
+  }
+
+  async exportAuditReport(dateRange: any) {
+    const params = new URLSearchParams(dateRange);
+    const response = await fetch(`${API_BASE_URL}/audit/export?${params}`, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('token')}`,
+      },
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to export audit report');
+    }
+    
+    return response;
+  }
   async getLands(params: any = {}) {
     const queryString = new URLSearchParams(params).toString();
     return this.request(`/lands${queryString ? `?${queryString}` : ''}`);

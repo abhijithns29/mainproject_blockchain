@@ -3,8 +3,10 @@ export interface User {
   fullName: string;
   email: string;
   walletAddress: string;
-  role: 'USER' | 'ADMIN';
+  role: 'USER' | 'ADMIN' | 'AUDITOR';
   verificationStatus: 'PENDING' | 'VERIFIED' | 'REJECTED';
+  twoFactorEnabled: boolean;
+  twoFactorSecret?: string;
   verificationDocuments?: {
     panCard?: {
       number: string;
@@ -30,7 +32,6 @@ export interface User {
   verifiedBy?: string;
   verificationDate?: string;
   rejectionReason?: string;
-  isVerified?: boolean;
   profile?: {
     phoneNumber?: string;
     address?: {
@@ -41,67 +42,9 @@ export interface User {
     };
     profileImage?: string;
   };
-  ownedProperties: string[];
-}
-
-export interface Property {
-  id: string;
-  blockchainId: number;
-  title: string;
-  description: string;
-  location: {
-    address: string;
-    city: string;
-    state: string;
-    zipCode: string;
-    coordinates?: {
-      lat: number;
-      lng: number;
-    };
-  };
-  size: number;
-  valuation: number;
-  owner: User;
-  status: 'AVAILABLE' | 'FOR_SALE' | 'FOR_RENT' | 'SOLD' | 'RENTED';
-  documents: Document[];
-  images: Document[];
-  metadata: {
-    propertyType?: string;
-    yearBuilt?: number;
-    amenities?: string[];
-    zoning?: string;
-  };
-  isVerified: boolean;
-  registrationDate: string;
-  transactionHistory: string[];
-}
-
-export interface Document {
-  name: string;
-  ipfsHash: string;
-  uploadDate: string;
-}
-
-export interface Transaction {
-  id: string;
-  propertyId: string;
-  blockchainTransactionId: number;
-  from?: User;
-  to: User;
-  transactionType: 'REGISTRATION' | 'SALE' | 'RENT' | 'TRANSFER';
-  amount: number;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
-  approvedBy?: User;
-  certificateHash?: string;
-  certificateUrl?: string;
-  blockchainTxHash?: string;
-  metadata: {
-    description?: string;
-    terms?: string;
-    duration?: number;
-    rejectionReason?: string;
-  };
+  ownedLands: string[];
   createdAt: string;
+  lastLogin?: string;
 }
 
 export interface Land {
@@ -125,6 +68,10 @@ export interface Land {
     east: string;
     west: string;
   };
+  coordinates?: {
+    latitude: number;
+    longitude: number;
+  };
   landType: 'AGRICULTURAL' | 'RESIDENTIAL' | 'COMMERCIAL' | 'INDUSTRIAL' | 'GOVERNMENT';
   classification?: 'DRY' | 'WET' | 'GARDEN' | 'INAM' | 'SARKAR';
   currentOwner?: User;
@@ -134,6 +81,7 @@ export interface Land {
     fromDate: string;
     toDate?: string;
     documentReference: string;
+    transactionType: string;
   }>;
   originalDocuments: Array<{
     type: string;
@@ -142,6 +90,7 @@ export interface Land {
     registrationOffice?: string;
     documentUrl: string;
     ipfsHash: string;
+    watermark?: string;
   }>;
   digitalDocument: {
     qrCode?: string;
@@ -149,6 +98,7 @@ export interface Land {
     ipfsHash?: string;
     generatedDate?: string;
     isDigitalized: boolean;
+    watermark?: string;
   };
   marketInfo: {
     isForSale: boolean;
@@ -157,11 +107,64 @@ export interface Land {
     listedDate?: string;
     description?: string;
     images?: string[];
+    features?: string[];
+    nearbyAmenities?: string[];
   };
   status: 'AVAILABLE' | 'FOR_SALE' | 'UNDER_TRANSACTION' | 'SOLD' | 'DISPUTED';
   verificationStatus: 'PENDING' | 'VERIFIED' | 'REJECTED';
   verifiedBy?: User;
   addedBy: User;
+  createdAt: string;
+  blockchainTxHash?: string;
+  escrowContract?: string;
+}
+
+export interface LandTransaction {
+  id: string;
+  transactionId: string;
+  landId: Land;
+  seller: User;
+  buyer: User;
+  agreedPrice: number;
+  escrowAmount: number;
+  transactionType: 'SALE' | 'TRANSFER' | 'INHERITANCE' | 'GIFT';
+  status: 'INITIATED' | 'DOCUMENTS_SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'COMPLETED' | 'CANCELLED';
+  documents: Array<{
+    documentType: string;
+    documentName: string;
+    documentUrl: string;
+    uploadedBy: User;
+    uploadDate: string;
+    verified: boolean;
+  }>;
+  adminReview: {
+    reviewedBy?: User;
+    reviewDate?: string;
+    comments?: string;
+    rejectionReason?: string;
+    documentsVerified: boolean;
+    legalClearance: boolean;
+  };
+  completionDetails?: {
+    completedDate: string;
+    registrationNumber: string;
+    transactionCertificate: {
+      certificateUrl: string;
+      qrCode: string;
+    };
+    newOwnershipDocument: {
+      certificateUrl: string;
+      qrCode: string;
+    };
+  };
+  blockchainTxHash?: string;
+  escrowContractAddress?: string;
+  timeline: Array<{
+    event: string;
+    timestamp: string;
+    performedBy: User;
+    description: string;
+  }>;
   createdAt: string;
 }
 
@@ -183,16 +186,11 @@ export interface Chat {
     offeredBy: User;
     status: 'PENDING' | 'ACCEPTED' | 'REJECTED' | 'COUNTER_OFFERED';
   };
-  status: 'ACTIVE' | 'DEAL_AGREED' | 'COMPLETED' | 'CANCELLED';
+  status: 'ACTIVE' | 'DEAL_AGREED' | 'TRANSACTION_INITIATED' | 'COMPLETED' | 'CANCELLED';
   agreedPrice?: number;
   agreedDate?: string;
   createdAt: string;
   updatedAt: string;
-}
-
-export interface LandTransaction extends Transaction {
-  landId: Land;
-  chatId?: string;
 }
 
 export interface AuthState {
@@ -200,4 +198,30 @@ export interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+}
+
+export interface MapLocation {
+  latitude: number;
+  longitude: number;
+  address?: string;
+}
+
+export interface EscrowContract {
+  contractAddress: string;
+  buyer: string;
+  seller: string;
+  amount: number;
+  status: 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+  createdAt: string;
+}
+
+export interface AuditLog {
+  id: string;
+  action: string;
+  performedBy: User;
+  targetResource: string;
+  targetId: string;
+  details: any;
+  timestamp: string;
+  ipAddress: string;
 }

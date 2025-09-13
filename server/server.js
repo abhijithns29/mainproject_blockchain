@@ -41,9 +41,10 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // API Routes
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/users', require('./routes/users'));
-app.use('/api/digitized-lands', require('./routes/digitizedLands'));
+app.use('/api/lands', require('./routes/lands'));
 app.use('/api/land-transactions', require('./routes/landTransactions'));
-app.use('/api/chats', require('./routes/chats'));
+app.use('/api/chats', require('./routes/chat'));
+app.use('/api/audit', require('./routes/audit'));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

@@ -1,18 +1,21 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const speakeasy = require('speakeasy');
 
 const userSchema = new mongoose.Schema({
   fullName: {
     type: String,
     required: true,
-    trim: true
+    trim: true,
+    maxlength: 100
   },
   email: {
     type: String,
     required: true,
     unique: true,
     lowercase: true,
-    trim: true
+    trim: true,
+    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
   },
   password: {
     type: String,
@@ -23,20 +26,35 @@ const userSchema = new mongoose.Schema({
     type: String,
     unique: true,
     sparse: true,
-    trim: true
+    trim: true,
+    match: [/^0x[a-fA-F0-9]{40}$/, 'Please enter a valid Ethereum address']
   },
   role: {
     type: String,
-    enum: ['USER', 'ADMIN'],
+    enum: ['USER', 'ADMIN', 'AUDITOR'],
     default: 'USER'
   },
+  
+  // Two-Factor Authentication
+  twoFactorEnabled: {
+    type: Boolean,
+    default: false
+  },
+  twoFactorSecret: {
+    type: String,
+    select: false
+  },
+  twoFactorBackupCodes: [{
+    code: String,
+    used: { type: Boolean, default: false }
+  }],
   
   // Verification system
   verificationStatus: {
     type: String,
     enum: ['PENDING', 'VERIFIED', 'REJECTED'],
     default: function() {
-      return this.role === 'ADMIN' ? 'VERIFIED' : 'PENDING';
+      return ['ADMIN', 'AUDITOR'].includes(this.role) ? 'VERIFIED' : 'PENDING';
     }
   },
   
@@ -45,50 +63,47 @@ const userSchema = new mongoose.Schema({
     aadhaarCard: {
       number: {
         type: String,
-        trim: true
+        trim: true,
+        match: [/^\d{12}$/, 'Aadhaar number must be 12 digits']
       },
       documentUrl: String,
       ipfsHash: String,
-      verified: {
-        type: Boolean,
-        default: false
-      }
+      verified: { type: Boolean, default: false },
+      watermark: String
     },
     panCard: {
       number: {
         type: String,
-        trim: true
+        trim: true,
+        uppercase: true,
+        match: [/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/, 'Invalid PAN format']
       },
       documentUrl: String,
       ipfsHash: String,
-      verified: {
-        type: Boolean,
-        default: false
-      }
+      verified: { type: Boolean, default: false },
+      watermark: String
     },
     drivingLicense: {
       number: {
         type: String,
-        trim: true
+        trim: true,
+        uppercase: true
       },
       documentUrl: String,
       ipfsHash: String,
-      verified: {
-        type: Boolean,
-        default: false
-      }
+      verified: { type: Boolean, default: false },
+      watermark: String
     },
     passport: {
       number: {
         type: String,
-        trim: true
+        trim: true,
+        uppercase: true
       },
       documentUrl: String,
       ipfsHash: String,
-      verified: {
-        type: Boolean,
-        default: false
-      }
+      verified: { type: Boolean, default: false },
+      watermark: String
     }
   },
   
@@ -104,17 +119,18 @@ const userSchema = new mongoose.Schema({
   profile: {
     phoneNumber: {
       type: String,
-      trim: true
+      trim: true,
+      match: [/^[6-9]\d{9}$/, 'Please enter a valid Indian mobile number']
     },
     address: {
       street: String,
       city: String,
       state: String,
-      zipCode: String,
-      country: {
+      zipCode: {
         type: String,
-        default: 'India'
-      }
+        match: [/^\d{6}$/, 'Please enter a valid 6-digit PIN code']
+      },
+      country: { type: String, default: 'India' }
     },
     profileImage: String
   },
@@ -122,31 +138,33 @@ const userSchema = new mongoose.Schema({
   // Land ownership references
   ownedLands: [{
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'DigitizedLand'
+    ref: 'Land'
   }],
   
-  // Account status
-  isActive: {
-    type: Boolean,
-    default: true
-  },
-  
-  // Login tracking
+  // Account security
+  isActive: { type: Boolean, default: true },
   lastLogin: Date,
-  loginAttempts: {
-    type: Number,
-    default: 0
-  },
-  lockUntil: Date
+  loginAttempts: { type: Number, default: 0 },
+  lockUntil: Date,
+  
+  // Audit trail
+  auditLog: [{
+    action: String,
+    timestamp: { type: Date, default: Date.now },
+    ipAddress: String,
+    userAgent: String
+  }]
 }, {
   timestamps: true
 });
 
-// Indexes for better performance
+// Indexes for performance
 userSchema.index({ email: 1 });
 userSchema.index({ walletAddress: 1 });
 userSchema.index({ verificationStatus: 1 });
 userSchema.index({ role: 1 });
+userSchema.index({ 'verificationDocuments.aadhaarCard.number': 1 });
+userSchema.index({ 'verificationDocuments.panCard.number': 1 });
 
 // Virtual for account lock status
 userSchema.virtual('isLocked').get(function() {
@@ -165,17 +183,12 @@ userSchema.pre('save', async function(next) {
     }
   }
   
-  // Set admin defaults
-  if (this.role === 'ADMIN') {
+  // Set admin/auditor defaults
+  if (['ADMIN', 'AUDITOR'].includes(this.role)) {
     this.verificationStatus = 'VERIFIED';
     if (!this.verificationDate) {
       this.verificationDate = new Date();
     }
-  }
-  
-  // Normalize email
-  if (this.isModified('email')) {
-    this.email = this.email.toLowerCase().trim();
   }
   
   next();
@@ -183,15 +196,28 @@ userSchema.pre('save', async function(next) {
 
 // Instance methods
 userSchema.methods.comparePassword = async function(candidatePassword) {
-  try {
-    return await bcrypt.compare(candidatePassword, this.password);
-  } catch (error) {
-    throw error;
-  }
+  return await bcrypt.compare(candidatePassword, this.password);
+};
+
+userSchema.methods.generateTwoFactorSecret = function() {
+  const secret = speakeasy.generateSecret({
+    name: `Land Registry (${this.email})`,
+    issuer: 'Land Registry System'
+  });
+  this.twoFactorSecret = secret.base32;
+  return secret;
+};
+
+userSchema.methods.verifyTwoFactorToken = function(token) {
+  return speakeasy.totp.verify({
+    secret: this.twoFactorSecret,
+    encoding: 'base32',
+    token,
+    window: 2
+  });
 };
 
 userSchema.methods.incrementLoginAttempts = function() {
-  // If we have a previous lock that has expired, restart at 1
   if (this.lockUntil && this.lockUntil < Date.now()) {
     return this.updateOne({
       $unset: { lockUntil: 1 },
@@ -201,9 +227,8 @@ userSchema.methods.incrementLoginAttempts = function() {
   
   const updates = { $inc: { loginAttempts: 1 } };
   
-  // Lock account after 5 failed attempts for 2 hours
   if (this.loginAttempts + 1 >= 5 && !this.isLocked) {
-    updates.$set = { lockUntil: Date.now() + 2 * 60 * 60 * 1000 }; // 2 hours
+    updates.$set = { lockUntil: Date.now() + 2 * 60 * 60 * 1000 };
   }
   
   return this.updateOne(updates);
@@ -215,18 +240,22 @@ userSchema.methods.resetLoginAttempts = function() {
   });
 };
 
-// Check if user has required verification documents
-userSchema.methods.hasRequiredDocuments = function() {
-  if (this.role === 'ADMIN') return true;
-  
-  const docs = this.verificationDocuments;
-  return (docs.aadhaarCard && docs.aadhaarCard.number) || 
-         (docs.panCard && docs.panCard.number);
-};
-
-// Check if user can claim land ownership
 userSchema.methods.canClaimLand = function() {
   return this.role === 'ADMIN' || this.verificationStatus === 'VERIFIED';
+};
+
+userSchema.methods.addAuditLog = function(action, ipAddress, userAgent) {
+  this.auditLog.push({
+    action,
+    timestamp: new Date(),
+    ipAddress,
+    userAgent
+  });
+  
+  // Keep only last 100 audit entries
+  if (this.auditLog.length > 100) {
+    this.auditLog = this.auditLog.slice(-100);
+  }
 };
 
 // Static methods
@@ -246,8 +275,10 @@ userSchema.statics.findPendingVerifications = function() {
 userSchema.methods.toJSON = function() {
   const user = this.toObject();
   delete user.password;
+  delete user.twoFactorSecret;
   delete user.loginAttempts;
   delete user.lockUntil;
+  delete user.twoFactorBackupCodes;
   return user;
 };
 

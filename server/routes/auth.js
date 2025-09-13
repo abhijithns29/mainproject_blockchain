@@ -1,6 +1,9 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const speakeasy = require('speakeasy');
+const QRCode = require('qrcode');
 const User = require('../models/User');
+const AuditLog = require('../models/AuditLog');
 const { auth } = require('../middleware/auth');
 
 const router = express.Router();
@@ -13,6 +16,7 @@ router.post('/register', async (req, res) => {
     // Validate required fields
     if (!fullName || !email || !password) {
       return res.status(400).json({ 
+        success: false,
         message: 'Full name, email, and password are required' 
       });
     }
@@ -21,6 +25,7 @@ router.post('/register', async (req, res) => {
     const existingUser = await User.findByEmail(email);
     if (existingUser) {
       return res.status(400).json({ 
+        success: false,
         message: 'User already exists with this email address' 
       });
     }
@@ -30,6 +35,7 @@ router.post('/register', async (req, res) => {
       const existingWallet = await User.findOne({ walletAddress });
       if (existingWallet) {
         return res.status(400).json({ 
+          success: false,
           message: 'User already exists with this wallet address' 
         });
       }
@@ -39,10 +45,16 @@ router.post('/register', async (req, res) => {
     const adminEmails = [
       'admin@landregistry.gov',
       'officer@landregistry.gov',
-      'superadmin@landregistry.gov'
+      'superadmin@landregistry.gov',
+      'auditor@landregistry.gov'
     ];
     
-    const userRole = adminEmails.includes(email.toLowerCase()) ? 'ADMIN' : 'USER';
+    let userRole = 'USER';
+    if (email.toLowerCase() === 'auditor@landregistry.gov') {
+      userRole = 'AUDITOR';
+    } else if (adminEmails.includes(email.toLowerCase())) {
+      userRole = 'ADMIN';
+    }
     
     // Create new user
     const userData = {
@@ -60,6 +72,16 @@ router.post('/register', async (req, res) => {
     const user = new User(userData);
     await user.save();
 
+    // Log registration
+    await AuditLog.logAction(
+      'USER_REGISTER',
+      user._id,
+      'USER',
+      user._id.toString(),
+      { email: user.email, role: user.role },
+      req
+    );
+
     // Generate JWT token
     const token = jwt.sign(
       { 
@@ -75,6 +97,7 @@ router.post('/register', async (req, res) => {
     console.log(`New user registered: ${user.email} (${user.role})`);
 
     res.status(201).json({
+      success: true,
       message: 'User registered successfully',
       token,
       user: {
@@ -84,7 +107,8 @@ router.post('/register', async (req, res) => {
         walletAddress: user.walletAddress,
         role: user.role,
         verificationStatus: user.verificationStatus,
-        isVerified: user.verificationStatus === 'VERIFIED'
+        isVerified: user.verificationStatus === 'VERIFIED',
+        twoFactorEnabled: user.twoFactorEnabled
       }
     });
   } catch (error) {
@@ -94,6 +118,7 @@ router.post('/register', async (req, res) => {
       const field = Object.keys(error.keyPattern)[0];
       const fieldName = field === 'walletAddress' ? 'wallet address' : field;
       return res.status(400).json({ 
+        success: false,
         message: `User already exists with this ${fieldName}` 
       });
     }
@@ -101,12 +126,144 @@ router.post('/register', async (req, res) => {
     if (error.name === 'ValidationError') {
       const messages = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({ 
+        success: false,
         message: messages.join(', ') 
       });
     }
     
     res.status(500).json({ 
+      success: false,
       message: 'Server error during registration. Please try again.' 
+    });
+  }
+});
+
+// Setup Two-Factor Authentication
+router.post('/2fa/setup', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id);
+    
+    if (user.twoFactorEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'Two-factor authentication is already enabled'
+      });
+    }
+
+    const secret = user.generateTwoFactorSecret();
+    await user.save();
+
+    const qrCodeUrl = await QRCode.toDataURL(secret.otpauth_url);
+
+    res.json({
+      success: true,
+      qrCode: qrCodeUrl,
+      secret: secret.base32,
+      message: 'Scan the QR code with your authenticator app'
+    });
+  } catch (error) {
+    console.error('2FA setup error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to setup two-factor authentication'
+    });
+  }
+});
+
+// Verify and enable Two-Factor Authentication
+router.post('/2fa/verify', auth, async (req, res) => {
+  try {
+    const { token, secret } = req.body;
+    
+    if (!token || !secret) {
+      return res.status(400).json({
+        success: false,
+        message: 'Token and secret are required'
+      });
+    }
+
+    const user = await User.findById(req.user._id).select('+twoFactorSecret');
+    
+    if (!user.twoFactorSecret) {
+      return res.status(400).json({
+        success: false,
+        message: 'Two-factor setup not initiated'
+      });
+    }
+
+    const isValid = user.verifyTwoFactorToken(token);
+    
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid verification code'
+      });
+    }
+
+    // Enable 2FA and generate backup codes
+    user.twoFactorEnabled = true;
+    
+    // Generate backup codes
+    const backupCodes = [];
+    for (let i = 0; i < 10; i++) {
+      const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+      backupCodes.push(code);
+      user.twoFactorBackupCodes.push({ code, used: false });
+    }
+    
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Two-factor authentication enabled successfully',
+      backupCodes
+    });
+  } catch (error) {
+    console.error('2FA verification error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to verify two-factor authentication'
+    });
+  }
+});
+
+// Disable Two-Factor Authentication
+router.post('/2fa/disable', auth, async (req, res) => {
+  try {
+    const { token } = req.body;
+    
+    const user = await User.findById(req.user._id).select('+twoFactorSecret');
+    
+    if (!user.twoFactorEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'Two-factor authentication is not enabled'
+      });
+    }
+
+    const isValid = user.verifyTwoFactorToken(token);
+    
+    if (!isValid) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid verification code'
+      });
+    }
+
+    user.twoFactorEnabled = false;
+    user.twoFactorSecret = undefined;
+    user.twoFactorBackupCodes = [];
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Two-factor authentication disabled successfully'
+    });
+  } catch (error) {
+    console.error('2FA disable error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to disable two-factor authentication'
     });
   }
 });

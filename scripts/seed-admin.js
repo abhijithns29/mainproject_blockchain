@@ -68,7 +68,8 @@ async function seedAdminUsers() {
         role: "ADMIN",
         verificationStatus: "VERIFIED",
         isActive: true,
-        ownedLands: []
+        ownedLands: [],
+        twoFactorEnabled: false
       },
       {
         fullName: "Land Registry Officer",
@@ -78,7 +79,19 @@ async function seedAdminUsers() {
         role: "ADMIN",
         verificationStatus: "VERIFIED",
         isActive: true,
-        ownedLands: []
+        ownedLands: [],
+        twoFactorEnabled: false
+      },
+      {
+        fullName: "System Auditor",
+        email: "auditor@landregistry.gov",
+        password: "auditor123",
+        walletAddress: "0x9cb2f109551bD432803012645Hac136c22c188fd",
+        role: "AUDITOR",
+        verificationStatus: "VERIFIED",
+        isActive: true,
+        ownedLands: [],
+        twoFactorEnabled: false
       }
     ];
 
@@ -95,10 +108,17 @@ async function seedAdminUsers() {
       console.log('✅ Created admin user: officer@landregistry.gov');
     }
 
+    // Check and create auditor
+    const existingAuditor = await User.findOne({ email: 'auditor@landregistry.gov' });
+    if (!existingAuditor) {
+      const auditor = new User(adminUsers[2]);
+      await auditor.save();
+      console.log('✅ Created auditor user: auditor@landregistry.gov');
+    }
     console.log('');
-    console.log('🎉 Admin Users Created Successfully!');
+    console.log('🎉 System Users Created Successfully!');
     console.log('');
-    console.log('🔐 Admin Credentials:');
+    console.log('🔐 System Credentials:');
     console.log('┌─────────────────────────────────────────────────────────┐');
     console.log('│ Admin Account 1:                                        │');
     console.log('│   Email: admin@landregistry.gov                        │');
@@ -111,6 +131,12 @@ async function seedAdminUsers() {
     console.log('│   Password: admin123                                    │');
     console.log('│   Role: Land Registry Officer                           │');
     console.log('│   Status: Auto-verified (no verification required)     │');
+    console.log('├─────────────────────────────────────────────────────────┤');
+    console.log('│ Auditor Account:                                        │');
+    console.log('│   Email: auditor@landregistry.gov                      │');
+    console.log('│   Password: auditor123                                  │');
+    console.log('│   Role: System Auditor                                  │');
+    console.log('│   Status: Auto-verified (read-only access)             │');
     console.log('└─────────────────────────────────────────────────────────┘');
     console.log('');
     console.log('📋 Admin Capabilities:');
