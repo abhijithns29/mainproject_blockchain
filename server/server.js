@@ -11,47 +11,111 @@ dotenv.config();
 
 // Initialize services
 const initializeServices = async () => {
-  await connectDB();
-  await blockchainService.initialize();
-  await ipfsService.initialize();
+  console.log('🚀 Initializing Land Registry System...');
+  
+  try {
+    await connectDB();
+    await blockchainService.initialize();
+    await ipfsService.initialize();
+    console.log('✅ All services initialized successfully');
+  } catch (error) {
+    console.error('❌ Service initialization failed:', error);
+    throw error;
+  }
 };
 
 const app = express();
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  credentials: true
+}));
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Serve uploaded files (for development)
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// Routes
+// API Routes
 app.use('/api/auth', require('./routes/auth'));
-app.use('/api/properties', require('./routes/properties'));
-app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/users', require('./routes/users'));
-app.use('/api/lands', require('./routes/lands'));
-app.use('/api/chat', require('./routes/chat'));
+app.use('/api/digitized-lands', require('./routes/digitizedLands'));
 app.use('/api/land-transactions', require('./routes/landTransactions'));
+app.use('/api/chats', require('./routes/chats'));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ message: 'Land Registry API is running', timestamp: new Date() });
+  res.json({ 
+    message: 'Blockchain Land Registry API is running',
+    timestamp: new Date(),
+    version: '1.0.0',
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// API documentation endpoint
+app.get('/api', (req, res) => {
+  res.json({
+    name: 'Blockchain Land Registry API',
+    version: '1.0.0',
+    description: 'Complete blockchain-based land registration and transfer system',
+    endpoints: {
+      auth: '/api/auth',
+      users: '/api/users',
+      digitizedLands: '/api/digitized-lands',
+      landTransactions: '/api/land-transactions',
+      chats: '/api/chats',
+      health: '/api/health'
+    },
+    documentation: 'See README.md for complete API documentation'
+  });
 });
 
 // Error handling middleware
 app.use((error, req, res, next) => {
   console.error('Server Error:', error);
+  
+  // Handle specific error types
+  if (error.name === 'ValidationError') {
+    return res.status(400).json({
+      message: 'Validation Error',
+      errors: Object.values(error.errors).map(err => err.message)
+    });
+  }
+  
+  if (error.name === 'CastError') {
+    return res.status(400).json({
+      message: 'Invalid ID format'
+    });
+  }
+  
+  if (error.code === 11000) {
+    return res.status(400).json({
+      message: 'Duplicate entry found'
+    });
+  }
+  
   res.status(500).json({ 
     message: 'Internal Server Error',
-    error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    error: process.env.NODE_ENV === 'development' ? error.message : 'Something went wrong'
   });
 });
 
 // 404 handler
 app.use('*', (req, res) => {
-  res.status(404).json({ message: 'Route not found' });
+  res.status(404).json({ 
+    message: 'Route not found',
+    availableRoutes: [
+      '/api/auth',
+      '/api/users',
+      '/api/digitized-lands',
+      '/api/land-transactions',
+      '/api/chats',
+      '/api/health'
+    ]
+  });
 });
 
 const PORT = process.env.PORT || 5000;
@@ -64,11 +128,41 @@ const startServer = async () => {
     app.listen(PORT, () => {
       console.log(`🚀 Land Registry Server running on port ${PORT}`);
       console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
+      console.log(`🌐 API URL: http://localhost:${PORT}/api`);
+      console.log(`📋 Health Check: http://localhost:${PORT}/api/health`);
+      console.log('');
+      console.log('🏗️  System Components:');
+      console.log('   ✅ Express Server');
+      console.log('   ✅ MongoDB Database');
+      console.log('   ✅ Blockchain Service (Ganache)');
+      console.log('   ✅ IPFS Storage');
+      console.log('   ✅ JWT Authentication');
+      console.log('');
+      console.log('📚 Available Collections:');
+      console.log('   - Users (Authentication & Verification)');
+      console.log('   - DigitizedLand (Digitized Land Database)');
+      console.log('   - LandTransaction (Transaction Records)');
+      console.log('   - Chat (Buyer-Seller Communication)');
+      console.log('');
+      console.log('🔐 Admin Accounts:');
+      console.log('   - admin@landregistry.gov / admin123');
+      console.log('   - officer@landregistry.gov / admin123');
     });
   } catch (error) {
-    console.error('Failed to start server:', error);
+    console.error('❌ Failed to start server:', error);
     process.exit(1);
   }
 };
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('SIGTERM received, shutting down gracefully');
+  process.exit(0);
+});
+
+process.on('SIGINT', () => {
+  console.log('SIGINT received, shutting down gracefully');
+  process.exit(0);
+});
 
 startServer();
