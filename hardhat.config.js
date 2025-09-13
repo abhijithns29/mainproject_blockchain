@@ -14,11 +14,11 @@ module.exports = {
   },
   networks: {
     hardhat: {
-      chainId: 5777
+      chainId: 1337
     },
     ganache: {
       url: "http://127.0.0.1:7545",
-      chainId: 5777,
+      chainId: 1337,
       accounts: process.env.ADMIN_PRIVATE_KEY ? [process.env.ADMIN_PRIVATE_KEY] : [],
       gas: 6721975,
       gasPrice: 20000000000

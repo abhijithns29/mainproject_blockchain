@@ -44,7 +44,7 @@ const AddLandForm: React.FC<AddLandFormProps> = ({ onClose, onSuccess }) => {
   const [showMap, setShowMap] = useState(false);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
+   const { name, value, type, checked } = e.target;  
     
     if (type === 'checkbox') {
       if (name.includes('.')) {

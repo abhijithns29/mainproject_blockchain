@@ -1,49 +1,49 @@
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-const AuditLog = require('../models/AuditLog');
+const jwt = require("jsonwebtoken");
+const User = require("../models/User");
+const AuditLog = require("../models/AuditLog");
 
 const auth = async (req, res, next) => {
   try {
-    const token = req.header('Authorization')?.replace('Bearer ', '');
+    const token = req.header("Authorization")?.replace("Bearer ", "");
 
     if (!token) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         success: false,
-        message: 'No token, authorization denied' 
+        message: "No token, authorization denied",
       });
     }
 
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret');
-    const user = await User.findById(decoded.id).select('-password');
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await User.findById(decoded.id).select("-password");
 
     if (!user) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         success: false,
-        message: 'Token is not valid' 
+        message: "Token is not valid",
       });
     }
 
     if (!user.isActive) {
-      return res.status(403).json({ 
+      return res.status(403).json({
         success: false,
-        message: 'Account is deactivated' 
+        message: "Account is deactivated",
       });
     }
 
     if (user.isLocked) {
-      return res.status(423).json({ 
+      return res.status(423).json({
         success: false,
-        message: 'Account is temporarily locked' 
+        message: "Account is temporarily locked",
       });
     }
 
     req.user = user;
     next();
   } catch (error) {
-    console.error('Auth middleware error:', error);
-    res.status(401).json({ 
+    console.error("Auth middleware error:", error);
+    res.status(401).json({
       success: false,
-      message: 'Token is not valid' 
+      message: "Token is not valid",
     });
   }
 };
@@ -51,32 +51,32 @@ const auth = async (req, res, next) => {
 const adminAuth = async (req, res, next) => {
   try {
     await auth(req, res, () => {});
-    
-    if (!['ADMIN'].includes(req.user.role)) {
+
+    if (!["ADMIN"].includes(req.user.role)) {
       // Log unauthorized access attempt
       await AuditLog.logAction(
-        'ADMIN_ACTION',
+        "ADMIN_ACTION",
         req.user._id,
-        'SYSTEM',
-        'UNAUTHORIZED_ACCESS',
+        "SYSTEM",
+        "UNAUTHORIZED_ACCESS",
         {
           attemptedRoute: req.originalUrl,
-          userRole: req.user.role
+          userRole: req.user.role,
         },
         req
       );
-      
-      return res.status(403).json({ 
+
+      return res.status(403).json({
         success: false,
-        message: 'Admin access required' 
+        message: "Admin access required",
       });
     }
 
     next();
   } catch (error) {
-    res.status(401).json({ 
+    res.status(401).json({
       success: false,
-      message: 'Authorization failed' 
+      message: "Authorization failed",
     });
   }
 };
@@ -84,19 +84,19 @@ const adminAuth = async (req, res, next) => {
 const auditorAuth = async (req, res, next) => {
   try {
     await auth(req, res, () => {});
-    
-    if (!['ADMIN', 'AUDITOR'].includes(req.user.role)) {
-      return res.status(403).json({ 
+
+    if (!["ADMIN", "AUDITOR"].includes(req.user.role)) {
+      return res.status(403).json({
         success: false,
-        message: 'Auditor access required' 
+        message: "Auditor access required",
       });
     }
 
     next();
   } catch (error) {
-    res.status(401).json({ 
+    res.status(401).json({
       success: false,
-      message: 'Authorization failed' 
+      message: "Authorization failed",
     });
   }
 };
@@ -104,17 +104,17 @@ const auditorAuth = async (req, res, next) => {
 const requireTwoFactor = async (req, res, next) => {
   try {
     const { twoFactorToken } = req.body;
-    
+
     if (!req.user.twoFactorEnabled) {
       // If 2FA is not enabled, proceed (but log the action)
       await AuditLog.logAction(
-        'ADMIN_ACTION',
+        "ADMIN_ACTION",
         req.user._id,
-        'SYSTEM',
-        'NO_2FA_WARNING',
+        "SYSTEM",
+        "NO_2FA_WARNING",
         {
           action: req.originalUrl,
-          warning: 'Sensitive action performed without 2FA'
+          warning: "Sensitive action performed without 2FA",
         },
         req
       );
@@ -122,41 +122,41 @@ const requireTwoFactor = async (req, res, next) => {
     }
 
     if (!twoFactorToken) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: 'Two-factor authentication token required',
-        requiresTwoFactor: true
+        message: "Two-factor authentication token required",
+        requiresTwoFactor: true,
       });
     }
 
-    const user = await User.findById(req.user._id).select('+twoFactorSecret');
+    const user = await User.findById(req.user._id).select("+twoFactorSecret");
     const isValidToken = user.verifyTwoFactorToken(twoFactorToken);
 
     if (!isValidToken) {
       await AuditLog.logAction(
-        'ADMIN_ACTION',
+        "ADMIN_ACTION",
         req.user._id,
-        'SYSTEM',
-        'INVALID_2FA',
+        "SYSTEM",
+        "INVALID_2FA",
         {
           action: req.originalUrl,
-          invalidToken: true
+          invalidToken: true,
         },
         req
       );
-      
-      return res.status(400).json({ 
+
+      return res.status(400).json({
         success: false,
-        message: 'Invalid two-factor authentication token' 
+        message: "Invalid two-factor authentication token",
       });
     }
 
     next();
   } catch (error) {
-    console.error('Two-factor auth error:', error);
-    res.status(500).json({ 
+    console.error("Two-factor auth error:", error);
+    res.status(500).json({
       success: false,
-      message: 'Two-factor authentication failed' 
+      message: "Two-factor authentication failed",
     });
   }
 };

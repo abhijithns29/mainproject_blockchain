@@ -35,6 +35,41 @@
       "artifacts": [
         "LandRegistry"
       ]
+    },
+    "D:\\mainproject\\contracts\\LandRegistry.sol": {
+      "lastModificationDate": 1757735214624,
+      "contentHash": "d5cb621aff36f91a98b3bc5d116bc64a",
+      "sourceName": "contracts/LandRegistry.sol",
+      "solcConfig": {
+        "version": "0.8.19",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.19"
+      ],
+      "artifacts": [
+        "LandRegistry"
+      ]
     }
   }
 }
